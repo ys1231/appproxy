@@ -1,4 +1,4 @@
-import 'package:bottommenu/proxypage/proxylist.dart';
+import 'package:appproxy/proxypage/proxylist.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -19,7 +19,10 @@ class MyApp extends StatelessWidget {
      * @return 返回一个配置了特定主题和起始页面的MaterialApp实例。
      */
     return MaterialApp(
-      title: 'iyue Flutter', // 应用标题
+      // 应用标题
+      title: 'iyue Flutter',
+      // 在调试模式下打开一个小“DEBUG”横幅，以指示应用程序处于调试模式。默认情况下（在调试模式下）处于打开状态，要将其关闭，请将构造函数参数设置为 false。在发布模式下这没有任何效果
+      debugShowCheckedModeBanner: true,
       theme: ThemeData(
         // 使用深紫色作为主题颜色方案的种子颜色
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
@@ -31,6 +34,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 class BottomMenuPage extends StatefulWidget {
   const BottomMenuPage({super.key});
 
@@ -42,7 +46,7 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
   int _currentIndex = 0;
   static const List<Widget> _children = <Widget>[
     ProxyListHome(),
-    Text('Profile',style: TextStyle(color: Colors.lightGreenAccent)),
+    Text('Profile', style: TextStyle(color: Colors.lightGreenAccent)),
     Text('Settings'),
   ];
 
@@ -54,10 +58,10 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(142, 0, 244,100),
+        backgroundColor: const Color.fromRGBO(142, 0, 244, 100),
         title: const Text(
-            'IyueProxy',
-           ),
+          'IyueProxy',
+        ),
       ),
       body: _children[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
@@ -69,7 +73,6 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
         },
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
-
             icon: Icon(Icons.home),
             label: '代理',
           ),

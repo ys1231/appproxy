@@ -24,9 +24,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
             Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => const AddProxyConfig()
-                )
-            );
+                    builder: (context) => const AddProxyConfig()));
           },
           child: Container(
             height: 50.0,
@@ -194,8 +192,8 @@ class _ProxyTypeState extends State<ProxyType> {
   @override
   Widget build(BuildContext context) {
     return DropdownMenu<proxyItem>(
-      // 设置菜单宽度为屏幕宽度的90%
-      width: MediaQuery.of(context).size.width * 0.9,
+      // 设置DropdownMenu的宽度将与其父级的宽度相同
+      expandedInsets: EdgeInsets.zero,
       // 设置初始选中项为_http
       initialSelection: proxyItem.http,
       // 关联的控制器
