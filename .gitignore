@@ -42,3 +42,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 tmp*
+test/widget_test.dart
