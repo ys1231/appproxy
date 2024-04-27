@@ -1,4 +1,4 @@
-import 'package:appproxy/proxypage/proxylist.dart';
+import 'package:appproxy/proxypage/proxylisthome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: true,
       theme: ThemeData(
         // 使用深紫色作为主题颜色方案的种子颜色
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(142, 0, 244, 1.0)),
         // 启用Material Design 3主题
         useMaterial3: true,
       ),
@@ -58,7 +58,7 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(142, 0, 244, 100),
+        backgroundColor: Theme.of(context).primaryColor,
         title: const Text(
           'IyueProxy',
         ),
