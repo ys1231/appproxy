@@ -22,6 +22,11 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+def keystore = localProperties.getProperty('flutter.keystore')
+if (keystore == null){
+    throw new Exception("flutter.keystore is not set")
+}
+
 android {
     namespace "cn.ys1231.appproxy"
     compileSdk flutter.compileSdkVersion
@@ -52,15 +57,12 @@ android {
 
     signingConfigs {
         debug {
-            keyAlias System.getenv("KEY_ALIAS")
-            keyPassword System.getenv("KEY_PASSWORD")
-            storeFile file(System.getenv("KEYSTORE_PATH"))
-            storePassword System.getenv("KEYSTORE_PASSWORD")
+
         }
         release {
             keyAlias System.getenv("KEY_ALIAS")
             keyPassword System.getenv("KEY_PASSWORD")
-            storeFile file(System.getenv("KEYSTORE_PATH"))
+            storeFile file(keystore)
             storePassword System.getenv("KEYSTORE_PASSWORD")
         }
     }
