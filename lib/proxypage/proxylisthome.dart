@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
+import '../data/proxy_config_data.dart';
 import 'addproxy.dart';
 
 class ProxyListHome extends StatefulWidget {
@@ -12,11 +12,21 @@ class ProxyListHome extends StatefulWidget {
 }
 
 class _ProxyListHomeState extends State<ProxyListHome> {
+  final ProxyConfigData _proxyConfigData = ProxyConfigData();
+
+  void handleConfigData(Map<String, dynamic> data) {
+    _proxyConfigData.addProxyConfig(data);
+    // 在这里处理从 AddProxyButton 返回的数据
+    print('Received data: $data');
+    // 可能还会根据数据更新state，触发UI重建等
+  }
+
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Text("ProxyListHome"),
-      floatingActionButton: AddProxyButton(),
+    _proxyConfigData.readProxyConfig();
+    return Scaffold(
+      body: const Text("ProxyListHome"),
+      floatingActionButton: AddProxyButton(onDataFetched:handleConfigData),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -24,21 +34,30 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
 // 添加代理按钮
 class AddProxyButton extends StatelessWidget {
-  const AddProxyButton({super.key});
+  const AddProxyButton({super.key, required this.onDataFetched});
 
+  // 定义一个回调，用于处理读取到的数据
+  final Function(Map<String, dynamic>) onDataFetched;
   @override
   Widget build(BuildContext context) {
+    // proxyConfigData.readProxyConfig();
     return InkWell(
-      // 点击事件处理函数
+        // 点击事件处理函数
         onTap: () {
           // 使用Navigator.push 实现页面路由跳转，传入当前上下文context和MaterialPageRoute构建器
           Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AddProxyWidget()),
+            context,
+            MaterialPageRoute(builder: (context) => const AddProxyWidget()),
           ).then((value) {
             if (kDebugMode) {
               print(value);
             }
+            if (value != null){
+              // 添加代理配置
+              // ProxyConfigData().addProxyConfig(value);
+              onDataFetched(value);
+            }
+
           });
         },
         child: Container(
@@ -69,7 +88,7 @@ class AddProxyButton extends StatelessWidget {
 
           // 在UI中创建一个带内边距的子组件，用于显示“添加代理”按钮
           child: const Padding(
-            // 设置四周的内边距为8.0
+              // 设置四周的内边距为8.0
               padding: EdgeInsets.all(8.0),
               // 使用IntrinsicWidth组件来确定其子组件的自然宽度
               child: IntrinsicWidth(
@@ -97,7 +116,6 @@ class AddProxyButton extends StatelessWidget {
                   ],
                 ),
               )),
-        )
-    );
+        ));
   }
 }
