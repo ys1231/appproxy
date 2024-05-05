@@ -2,6 +2,8 @@ import 'package:appproxy/proxypage/proxylisthome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'appconfig/appconfig.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -44,24 +46,43 @@ class BottomMenuPage extends StatefulWidget {
 
 class _BottomMenuPageState extends State<BottomMenuPage> {
   int _currentIndex = 0;
-  static const List<Widget> _children = <Widget>[
-    ProxyListHome(),
-    Text('Profile', style: TextStyle(color: Colors.lightGreenAccent)),
-    Text('Settings'),
-  ];
+  String _appBarTitle = 'IyueProxy';
+
+  void updateAppBarTitle(String title) {
+    setState(() {
+      // 更新AppBar的标题
+      _appBarTitle = title;
+    });
+  }
+
+  /// initState函数是在State对象被创建并插入到Widget树中时调用的。
+  /// 这个函数不接受任何参数，并且没有返回值。
+  /// 在这个函数中，我们可以进行一些初始化操作，比如设置状态栏颜色、初始化数据等。
+  @override
+  void initState() {
+    super.initState(); // 调用父类的initState方法
+
+    // 设置系统UI覆盖样式，主要是状态栏颜色
+    // SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    //   statusBarColor: Colors.white, // 设置状态栏颜色为白色
+    // ));
+
+    // 初始化_children列表，包含首页、配置列表和设置页三个Widget
+    _children = <Widget>[
+      const ProxyListHome(), // 首页Widget
+      AppConfigList(onTitleChange: updateAppBarTitle), // 配置列表Widget，标题变化时更新AppBar标题
+      const Text('Settings'), // 设置页Widget
+    ];
+  }
+
+  late List<Widget> _children;
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.white,
-    ));
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).primaryColor,
-        title: const Text(
-          'IyueProxy',
-        ),
+        title: Text(_appBarTitle),
       ),
       body: _children[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
