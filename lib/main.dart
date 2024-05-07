@@ -61,12 +61,6 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
   @override
   void initState() {
     super.initState(); // 调用父类的initState方法
-
-    // 设置系统UI覆盖样式，主要是状态栏颜色
-    // SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    //   statusBarColor: Colors.white, // 设置状态栏颜色为白色
-    // ));
-
     // 初始化_children列表，包含首页、配置列表和设置页三个Widget
     _children = <Widget>[
       const ProxyListHome(), // 首页Widget
@@ -84,7 +78,10 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
         backgroundColor: Theme.of(context).primaryColor,
         title: Text(_appBarTitle),
       ),
-      body: _children[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _children,
+      ), //_children[_currentIndex]),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
