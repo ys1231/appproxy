@@ -1,8 +1,8 @@
-import 'package:appproxy/ui/proxy_list_ui.dart';
+import 'package:appproxy/ui/proxy_config_list.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'ui/appconfig.dart';
+import 'ui/app_config_list.dart';
 
 void main() {
   runApp(const MyApp());

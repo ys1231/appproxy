@@ -6,6 +6,7 @@ import 'dart:convert';
 class ProxyConfigData {
 
   Map<String, dynamic> dataConfigs = {};
+  // 标记只运行一次
   bool isrunning = false;
 
   Future<String> get _localPath async {
@@ -28,6 +29,7 @@ class ProxyConfigData {
     return file.writeAsString(jsonEncode(dataConfigs),flush: true);
   }
 
+  // 获取打印所有配置 只能执行一次
   Future<Map<String, dynamic>> readProxyConfig() async {
     try {
       if (isrunning){

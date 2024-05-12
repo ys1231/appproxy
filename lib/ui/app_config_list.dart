@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../data/app_proxy_config_data.dart';
+
 class AppConfigList extends StatefulWidget {
   const AppConfigList({super.key, required this.onTitleChange});
 
@@ -17,8 +19,9 @@ class _AppConfigState extends State<AppConfigList> {
   var _itemCount = 0;
   late List _jsonAppListInfo;
   static const platform = MethodChannel('cn.ys1231/appproxy');
-  final Map<String, bool> _selectedItemsMap = {};
+  late final Map<String, bool> _selectedItemsMap;
   late Future<bool> _calculation;
+  final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
 
   @override
   void initState() {
@@ -27,8 +30,15 @@ class _AppConfigState extends State<AppConfigList> {
       print("iyue-> initState");
     }
     _calculation = getAppList();
+    _initData().then((value) => null);
   }
 
+  // 初始化数据
+  Future<void> _initData() async {
+    _selectedItemsMap = await _appfile.readAppConfig();
+  }
+
+  /// 远程调用获取Android 应用列表
   Future<bool> getAppList() async {
     try {
       if (kDebugMode) {
@@ -114,11 +124,12 @@ class _AppConfigState extends State<AppConfigList> {
                   // 列表项数量
                   itemCount: _itemCount,
                   // 列表项构建器
-                  itemBuilder: (BuildContext context, int index) {
-                    Map<String, dynamic> listItem = _jsonAppListInfo[index];
+                  itemBuilder: (BuildContext context, int c_index) {
+                    Map<String, dynamic> listItem = _jsonAppListInfo[c_index];
                     // 返回一个卡片
                     return Card(
-                      key: ValueKey(index),
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0,vertical: 4.0) ,
+                      key: ValueKey(c_index),
                       // 列表项内容
                       child: ListTile(
                         // 设置水平标题间距
@@ -141,9 +152,10 @@ class _AppConfigState extends State<AppConfigList> {
                         // 显示一个复选框
                         trailing: CardCheckbox(
                             isSelected: _selectedItemsMap[listItem["packageName"]] ?? false,
-                            index: index,
+                            index: c_index,
                             callbackOnChanged: (newValue) {
                               _selectedItemsMap[listItem["packageName"]] = newValue;
+                              _appfile.saveAppConfig(_selectedItemsMap);
                             }),
                       ),
                     );
