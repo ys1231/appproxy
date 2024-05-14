@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 class AppProxyConfigData {
 
   // 定义一个路径变量
-  String _configName;
+  final String _configName;
 
   // 定义一个文件对象
   File? _configFile;

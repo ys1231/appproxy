@@ -1,11 +1,10 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../data/proxy_config_data.dart';
 import 'addproxy.dart';
 
 class ProxyListHome extends StatefulWidget {
-  const ProxyListHome({Key? key}) : super(key: key);
+  const ProxyListHome({super.key});
 
   @override
   State<ProxyListHome> createState() => _ProxyListHomeState();
@@ -14,19 +13,108 @@ class ProxyListHome extends StatefulWidget {
 class _ProxyListHomeState extends State<ProxyListHome> {
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
 
+  int _itemCount = 1;
+  List<Map<String, dynamic>> _dataLists = [];
+  bool _iscalled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kDebugMode) {
+      print("---- ProxyListHome initState call ");
+    }
+    initProxyConfig();
+  }
+
+  void initProxyConfig() {
+    if (kDebugMode) {
+      print("---- ProxyListHome initProxyConfig call ");
+    }
+    if (_iscalled) {
+      return;
+    }
+    _iscalled = true;
+    try {
+      _proxyConfigData.readProxyConfig().then((value){
+        _dataLists = value ?? [];
+        _itemCount += _dataLists.length;
+        setState(() {});
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print("---- ProxyListHome initProxyConfig error $e");
+      }
+      _dataLists = [];
+    }
+
+    if (_dataLists.isEmpty) {
+      Map<String, dynamic> proxyConfig = {};
+      proxyConfig['proxyName'] = "default";
+      proxyConfig['proxyType'] = "http";
+      proxyConfig['proxyHost'] = "192.168.1.2";
+      proxyConfig['proxyPort'] = "8080";
+      proxyConfig['proxyUser'] = "";
+      proxyConfig['proxyPass'] = "";
+      _dataLists.add(proxyConfig);
+      _itemCount += _dataLists.length;
+      _proxyConfigData.addProxyConfig(proxyConfig);
+    }
+    return;
+  }
+
   void handleConfigData(Map<String, dynamic> data) {
     _proxyConfigData.addProxyConfig(data);
+    _dataLists.add(data);
     // 在这里处理从 AddProxyButton 返回的数据
     print('Received data: $data');
     // 可能还会根据数据更新state，触发UI重建等
+    _itemCount += 1;
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    _proxyConfigData.readProxyConfig();
+    if (kDebugMode) {
+      print("---- ProxyListHome build call $_itemCount $_dataLists");
+    }
     return Scaffold(
-      body: const Text("ProxyListHome"),
-      floatingActionButton: AddProxyButton(onDataFetched:handleConfigData),
+      body: ListView.separated(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 70.0),
+        // 配置列表个数
+        itemCount: _itemCount,
+        // 设置分隔符零尺寸
+        itemBuilder: (BuildContext context, int index) {
+          return const SizedBox.shrink();
+        },
+        separatorBuilder: (BuildContext context, int c_index) {
+          if (kDebugMode) {
+            print("---- ProxyListHome $c_index ");
+          }
+          Map<String, dynamic> c_data = _dataLists[c_index];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            key: ValueKey(c_index),
+            child: ListTile(
+              title: Text('${c_data["proxyName"]}'),
+              subtitle: Text(
+                  '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () {
+                  // 删除代理配置
+                },
+              ),
+              onTap: (){
+                if (kDebugMode) {
+                  print("---- ProxyListHome onTap $c_index ${_dataLists[c_index]["proxyName"]}");
+                }
+              },
+            ),
+          );
+        },
+      ),
+      floatingActionButton: AddProxyButton(onDataFetched: handleConfigData),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -38,6 +126,7 @@ class AddProxyButton extends StatelessWidget {
 
   // 定义一个回调，用于处理读取到的数据
   final Function(Map<String, dynamic>) onDataFetched;
+
   @override
   Widget build(BuildContext context) {
     // proxyConfigData.readProxyConfig();
@@ -52,12 +141,9 @@ class AddProxyButton extends StatelessWidget {
             if (kDebugMode) {
               print(value);
             }
-            if (value != null){
-              // 添加代理配置
-              // ProxyConfigData().addProxyConfig(value);
+            if (value != null) {
               onDataFetched(value);
             }
-
           });
         },
         child: Container(

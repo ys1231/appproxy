@@ -46,14 +46,7 @@ class BottomMenuPage extends StatefulWidget {
 
 class _BottomMenuPageState extends State<BottomMenuPage> {
   int _currentIndex = 0;
-  String _appBarTitle = 'IyueProxy';
-
-  void updateAppBarTitle(String title) {
-    setState(() {
-      // 更新AppBar的标题
-      _appBarTitle = title;
-    });
-  }
+  late List<String> _appBarTitles;
 
   /// initState函数是在State对象被创建并插入到Widget树中时调用的。
   /// 这个函数不接受任何参数，并且没有返回值。
@@ -64,9 +57,10 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
     // 初始化_children列表，包含首页、配置列表和设置页三个Widget
     _children = <Widget>[
       const ProxyListHome(), // 首页Widget
-      AppConfigList(onTitleChange: updateAppBarTitle), // 配置列表Widget，标题变化时更新AppBar标题
+      const AppConfigList(), // 配置列表Widget，标题变化时更新AppBar标题
       const Text('Settings'), // 设置页Widget
     ];
+    _appBarTitles = ['ProxyConfig', 'AppConfigList', 'Settings'];
   }
 
   late List<Widget> _children;
@@ -76,7 +70,7 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).primaryColor,
-        title: Text(_appBarTitle),
+        title: Text(_appBarTitles[_currentIndex]),
       ),
       body: IndexedStack(
         index: _currentIndex,

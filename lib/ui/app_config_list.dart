@@ -7,9 +7,7 @@ import 'package:flutter/services.dart';
 import '../data/app_proxy_config_data.dart';
 
 class AppConfigList extends StatefulWidget {
-  const AppConfigList({super.key, required this.onTitleChange});
-
-  final Function(String) onTitleChange;
+  const AppConfigList({super.key});
 
   @override
   State<AppConfigList> createState() => _AppConfigState();
@@ -80,7 +78,6 @@ class _AppConfigState extends State<AppConfigList> {
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       //   在当前帧构建完成后，调用onTitleChange
-      widget.onTitleChange('AppConfigList');
     });
     if (kDebugMode) {
       print("iyue-<build> _itemCount:$_itemCount");
@@ -119,6 +116,7 @@ class _AppConfigState extends State<AppConfigList> {
               child: Scrollbar(
                 // 列表
                 child: ListView.separated(
+                  physics: const BouncingScrollPhysics(),
                   // 返回一个零尺寸的SizedBox
                   separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
                   // 列表项数量

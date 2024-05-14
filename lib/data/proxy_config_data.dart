@@ -5,9 +5,7 @@ import 'dart:convert';
 
 class ProxyConfigData {
 
-  Map<String, dynamic> dataConfigs = {};
-  // 标记只运行一次
-  bool isrunning = false;
+  List<Map<String, dynamic>> dataConfiglists = [ ];
 
   Future<String> get _localPath async {
     final directory = await getApplicationDocumentsDirectory();
@@ -22,35 +20,43 @@ class ProxyConfigData {
   Future<File> addProxyConfig(Map<String, dynamic> data) async {
     final file = await _localFile;
     // Write the file
-    dataConfigs[data['proxyName']!] = data;
-    if (kDebugMode) {
-      print("addProxyConfig:$dataConfigs");
+    if (data.isEmpty ){
+      return file;
     }
-    return file.writeAsString(jsonEncode(dataConfigs),flush: true);
+    dataConfiglists.add(data);
+    if (kDebugMode) {
+      print("addProxyConfig:$data");
+    }
+    String jsonString = jsonEncode(dataConfiglists);
+    file.writeAsStringSync(jsonString);
+    return file;
   }
 
   // 获取打印所有配置 只能执行一次
-  Future<Map<String, dynamic>> readProxyConfig() async {
+  Future<List<Map<String, dynamic>>?> readProxyConfig() async {
     try {
-      if (isrunning){
-        return dataConfigs;
-      }
-      isrunning = true;
       final file = await _localFile;
-      String contents = await file.readAsString();
-      dataConfigs = jsonDecode(contents);
-      if (dataConfigs.isEmpty) {
-        return {};
+      String contents = file.readAsStringSync();
+      List<dynamic> decodedList = jsonDecode(contents);
+      for (var item in decodedList) {
+        assert(item is Map<String, dynamic>);
+        dataConfiglists.add(item);
       }
-      for (var key in dataConfigs.keys) {
-        if (kDebugMode) {
-          print("readProxyConfig:$key,${dataConfigs[key]}");
+      if (dataConfiglists.isEmpty) {
+        return null;
+      }
+      if(kDebugMode){
+        for (var i = 0; i < dataConfiglists.length; i++){
+          print("readProxyConfig:${dataConfiglists[i]}");
         }
       }
-      return dataConfigs;
+      return dataConfiglists;
     } catch (e) {
       // If we encounter an error, return 0
-      return dataConfigs;
+      if(kDebugMode){
+        print("readProxyConfig: fail $e");
+      }
+      return null;
     }
   }
 
