@@ -13,7 +13,7 @@ class ProxyListHome extends StatefulWidget {
 class _ProxyListHomeState extends State<ProxyListHome> {
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
 
-  int _itemCount = 1;
+  int _itemCount = 0;
   List<Map<String, dynamic>> _dataLists = [];
   bool _iscalled = false;
 
@@ -35,41 +35,29 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     _iscalled = true;
     try {
-      _proxyConfigData.readProxyConfig().then((value){
+      _proxyConfigData.readProxyConfig().then((value) {
         _dataLists = value ?? [];
-        _itemCount += _dataLists.length;
+        _itemCount = _dataLists.length;
         setState(() {});
       });
     } catch (e) {
       if (kDebugMode) {
         print("---- ProxyListHome initProxyConfig error $e");
       }
-      _dataLists = [];
     }
 
-    if (_dataLists.isEmpty) {
-      Map<String, dynamic> proxyConfig = {};
-      proxyConfig['proxyName'] = "default";
-      proxyConfig['proxyType'] = "http";
-      proxyConfig['proxyHost'] = "192.168.1.2";
-      proxyConfig['proxyPort'] = "8080";
-      proxyConfig['proxyUser'] = "";
-      proxyConfig['proxyPass'] = "";
-      _dataLists.add(proxyConfig);
-      _itemCount += _dataLists.length;
-      _proxyConfigData.addProxyConfig(proxyConfig);
-    }
     return;
   }
 
   void handleConfigData(Map<String, dynamic> data) {
     _proxyConfigData.addProxyConfig(data);
-    _dataLists.add(data);
-    // 在这里处理从 AddProxyButton 返回的数据
-    print('Received data: $data');
-    // 可能还会根据数据更新state，触发UI重建等
-    _itemCount += 1;
-    setState(() {});
+    setState(() {
+      _dataLists.add(data);
+      // 在这里处理从 AddProxyButton 返回的数据
+      print('Received data: $data');
+      // 可能还会根据数据更新state，触发UI重建等
+      _itemCount += 1;
+    });
   }
 
   @override
@@ -84,10 +72,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         // 配置列表个数
         itemCount: _itemCount,
         // 设置分隔符零尺寸
-        itemBuilder: (BuildContext context, int index) {
+        separatorBuilder: (BuildContext context, int index) {
           return const SizedBox.shrink();
         },
-        separatorBuilder: (BuildContext context, int c_index) {
+        itemBuilder: (BuildContext context, int c_index) {
           if (kDebugMode) {
             print("---- ProxyListHome $c_index ");
           }
@@ -105,9 +93,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                   // 删除代理配置
                 },
               ),
-              onTap: (){
+              onTap: () {
                 if (kDebugMode) {
-                  print("---- ProxyListHome onTap $c_index ${_dataLists[c_index]["proxyName"]}");
+                  print(
+                      "---- ProxyListHome onTap ${c_data["proxyName"]}");
                 }
               },
             ),

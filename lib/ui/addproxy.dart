@@ -36,12 +36,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
 
   @override
   Widget build(BuildContext context) {
-    proxyConfig['proxyName'] = "default";
-    proxyConfig['proxyType'] = "http";
-    proxyConfig['proxyHost'] = "192.168.";
-    proxyConfig['proxyPort'] = "8080";
-    proxyConfig['proxyUser'] = "";
-    proxyConfig['proxyPass'] = "";
+
     return Scaffold(
         appBar: AppBar(
           title: const Text("添加代理"),
