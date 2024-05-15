@@ -27,7 +27,7 @@ class _AppConfigState extends State<AppConfigList> {
     if (kDebugMode) {
       print("iyue-> initState");
     }
-    _calculation = getAppList();
+    // _calculation = getAppList();
     _initData().then((value) => null);
   }
 
@@ -57,9 +57,9 @@ class _AppConfigState extends State<AppConfigList> {
         // 如果两个都已选中，按原始顺序
         return 0;
       });
-      setState(() {
+      // setState(() {
         _itemCount = _jsonAppListInfo.length;
-      });
+      // });
       return true;
     } on PlatformException catch (e) {
       if (kDebugMode) {
@@ -89,7 +89,7 @@ class _AppConfigState extends State<AppConfigList> {
      * @return 返回一个FutureBuilder，根据计算的状态显示加载动画、错误信息或计算结果。
      */
     return FutureBuilder(
-        future: _calculation, // 用于FutureBuilder的异步计算
+        future: getAppList(), // 用于FutureBuilder的异步计算
         builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) { // 异步快照的构建器回调
           // 当计算状态为等待时，显示加载动画
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -107,10 +107,13 @@ class _AppConfigState extends State<AppConfigList> {
               onRefresh: () {
                 // 当调用此函数时，会延迟1秒后执行[getAppList]函数
                 return Future.delayed(const Duration(seconds: 1), () {
-                  getAppList();
-                  if (kDebugMode) {
-                    print("onRefresh");
-                  }
+                  setState(() {
+                    getAppList();
+                    if (kDebugMode) {
+                      print("onRefresh");
+                    }
+                  });
+
                 });
               },
               // 带滚动条的列表
