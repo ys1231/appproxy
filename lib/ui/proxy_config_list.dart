@@ -36,9 +36,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     _iscalled = true;
     try {
       _proxyConfigData.readProxyConfig().then((value) {
-        _dataLists = value ?? [];
-        _itemCount = _dataLists.length;
-        setState(() {});
+        setState(() {
+          _dataLists = value ?? [];
+          _itemCount = _dataLists.length;
+        });
       });
     } catch (e) {
       if (kDebugMode) {
@@ -50,13 +51,14 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   void handleConfigData(Map<String, dynamic> data) {
-    _proxyConfigData.addProxyConfig(data);
-    setState(() {
-      _dataLists.add(data);
-      // 在这里处理从 AddProxyButton 返回的数据
-      print('Received data: $data');
-      // 可能还会根据数据更新state，触发UI重建等
-      _itemCount += 1;
+    // 在这里处理从 AddProxyButton 返回的数据
+    _proxyConfigData.addProxyConfig(data).then((value){
+      setState(() {
+        _dataLists.add(data);
+        if(kDebugMode) print('Received data: $data');
+        // 可能还会根据数据更新state，触发UI重建等
+        _itemCount += 1;
+      });
     });
   }
 
@@ -67,7 +69,9 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     return Scaffold(
       body: ListView.separated(
+        // 创建从边缘反弹的滚动物理效果
         physics: const BouncingScrollPhysics(),
+        // 设置底部内边距 解决底部按钮遮挡问题
         padding: const EdgeInsets.only(bottom: 70.0),
         // 配置列表个数
         itemCount: _itemCount,
@@ -85,18 +89,23 @@ class _ProxyListHomeState extends State<ProxyListHome> {
             key: ValueKey(c_index),
             child: ListTile(
               title: Text('${c_data["proxyName"]}'),
-              subtitle: Text(
-                  '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+              subtitle: Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
               trailing: IconButton(
                 icon: const Icon(Icons.delete),
                 onPressed: () {
-                  // 删除代理配置
+                  if (kDebugMode) {
+                    print("delete item:$c_data");
+                  }
+                  setState(() {
+                    _dataLists.removeAt(c_index);
+                    _itemCount = _dataLists.length;
+                    _proxyConfigData.deleteProxyConfig(c_data);
+                  });
                 },
               ),
               onTap: () {
                 if (kDebugMode) {
-                  print(
-                      "---- ProxyListHome onTap ${c_data["proxyName"]}");
+                  print("---- ProxyListHome onTap ${c_data}");
                 }
               },
             ),

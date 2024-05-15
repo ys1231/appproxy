@@ -105,6 +105,7 @@ class _AppConfigState extends State<AppConfigList> {
             // 带刷新的动态列表
             return RefreshIndicator(
               onRefresh: () {
+                // 当调用此函数时，会延迟1秒后执行[getAppList]函数
                 return Future.delayed(const Duration(seconds: 1), () {
                   getAppList();
                   if (kDebugMode) {

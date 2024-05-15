@@ -17,11 +17,11 @@ class ProxyConfigData {
     return File('$path/proxyConfig.json');
   }
 
-  Future<File> addProxyConfig(Map<String, dynamic> data) async {
+  Future<void> addProxyConfig(Map<String, dynamic> data) async {
     final file = await _localFile;
     // Write the file
     if (data.isEmpty ){
-      return file;
+      return ;
     }
     dataConfiglists.add(data);
     if (kDebugMode) {
@@ -29,7 +29,22 @@ class ProxyConfigData {
     }
     String jsonString = jsonEncode(dataConfiglists);
     file.writeAsStringSync(jsonString);
-    return file;
+    return ;
+  }
+
+  Future<void> deleteProxyConfig(Map<String, dynamic> data) async {
+    final file = await _localFile;
+    // Write the file
+    if (data.isEmpty ){
+      return;
+    }
+    dataConfiglists.remove(data);
+    if (kDebugMode) {
+      print("delete ProxyConfig:$data");
+    }
+    String jsonString = jsonEncode(dataConfiglists);
+    file.writeAsStringSync(jsonString);
+    return;
   }
 
   // 获取打印所有配置 只能执行一次
