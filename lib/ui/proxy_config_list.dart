@@ -52,10 +52,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   void handleConfigData(Map<String, dynamic> data) {
     // 在这里处理从 AddProxyButton 返回的数据
-    _proxyConfigData.addProxyConfig(data).then((value){
+    _proxyConfigData.addProxyConfig(data).then((value) {
       setState(() {
         _dataLists.add(data);
-        if(kDebugMode) print('Received data: $data');
+        if (kDebugMode) print('Received data: $data');
         // 可能还会根据数据更新state，触发UI重建等
         _itemCount += 1;
       });
@@ -81,7 +81,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         },
         itemBuilder: (BuildContext context, int c_index) {
           if (kDebugMode) {
-            print("---- ProxyListHome $c_index ");
+            print("---- ProxyListHome c_index: $c_index ");
           }
           Map<String, dynamic> c_data = _dataLists[c_index];
           return Card(
@@ -89,7 +89,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
             key: ValueKey(c_index),
             child: ListTile(
               title: Text('${c_data["proxyName"]}'),
-              subtitle: Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+              subtitle: Text(
+                  '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
               trailing: IconButton(
                 icon: const Icon(Icons.delete),
                 onPressed: () {
@@ -149,7 +150,7 @@ class AddProxyButton extends StatelessWidget {
           // 构建一个BoxDecoration对象，用于设置容器的装饰效果
           decoration: BoxDecoration(
             // 设置背景颜色为紫色
-            color: Colors.purple,
+            color: Colors.purple.withOpacity(0.9),
             // 设置边框圆角为24.0
             borderRadius: BorderRadius.circular(15.0),
             boxShadow: [
@@ -185,10 +186,7 @@ class AddProxyButton extends StatelessWidget {
                   // 子组件数组，包括一个图标和一个文本
                   children: [
                     // 添加图标组件
-                    Icon(
-                      Icons.add,
-                      color: Colors.white,
-                    ),
+                    Icon(Icons.add, color: Colors.white),
                     // 在图标和文本之间添加一个宽度为10.0的空白间隔
                     SizedBox(width: 5.0),
                     // 添加文本组件，显示“添加代理”文本
