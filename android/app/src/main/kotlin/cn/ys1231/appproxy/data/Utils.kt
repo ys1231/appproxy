@@ -30,7 +30,9 @@ class Utils(val context: Context) {
 
         var appInfoList = mutableListOf<MutableMap<String, Any>>()
         for (info in resolveInfos) {
-
+            if (info.loadLabel(pm).toString() == "appproxy"){
+                continue
+            }
             var appInfoMap = mutableMapOf<String, Any>()
             appInfoMap["label"] = info.loadLabel(pm).toString()
             appInfoMap["packageName"] = info.activityInfo.packageName
