@@ -1,11 +1,10 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../data/proxy_config_data.dart';
 import 'addproxy.dart';
 
 class ProxyListHome extends StatefulWidget {
-  const ProxyListHome({Key? key}) : super(key: key);
+  const ProxyListHome({super.key});
 
   @override
   State<ProxyListHome> createState() => _ProxyListHomeState();
@@ -14,19 +13,109 @@ class ProxyListHome extends StatefulWidget {
 class _ProxyListHomeState extends State<ProxyListHome> {
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
 
+  List<Map<String, dynamic>> _dataLists = [];
+  bool _iscalled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kDebugMode) {
+      print("---- ProxyListHome initState call ");
+    }
+    initProxyConfig();
+  }
+
+  void initProxyConfig() {
+    if (kDebugMode) {
+      print("---- ProxyListHome initProxyConfig call ");
+    }
+    if (_iscalled) {
+      return;
+    }
+    _iscalled = true;
+    try {
+      _proxyConfigData.readProxyConfig().then((value) {
+        setState(() {
+          _dataLists.clear();
+          _dataLists = value ?? [];
+        });
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print("---- ProxyListHome initProxyConfig error $e");
+      }
+    }
+
+    return;
+  }
+
   void handleConfigData(Map<String, dynamic> data) {
-    _proxyConfigData.addProxyConfig(data);
     // 在这里处理从 AddProxyButton 返回的数据
-    print('Received data: $data');
-    // 可能还会根据数据更新state，触发UI重建等
+    if (_dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
+      if (kDebugMode) {
+        print("handleConfigData Data already exists in the list, skipping.");
+      }
+      return;
+    }
+    _dataLists.add(data);
+    _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
+    setState(() {
+      if (kDebugMode) {
+        print('Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    _proxyConfigData.readProxyConfig();
+    if (kDebugMode) {
+      print("---- ProxyListHome build call: $_dataLists");
+    }
     return Scaffold(
-      body: const Text("ProxyListHome"),
-      floatingActionButton: AddProxyButton(onDataFetched:handleConfigData),
+      body: ListView.separated(
+        // 创建从边缘反弹的滚动物理效果
+        physics: const BouncingScrollPhysics(),
+        // 设置底部内边距 解决底部按钮遮挡问题
+        padding: const EdgeInsets.only(bottom: 70.0),
+        // 配置列表个数
+        itemCount: _dataLists.length,
+        // 设置分隔符零尺寸
+        separatorBuilder: (BuildContext context, int index) {
+          return const SizedBox.shrink();
+        },
+        itemBuilder: (BuildContext context, int c_index) {
+          if (kDebugMode) {
+            print("---- ProxyListHome c_index: $c_index ");
+          }
+          Map<String, dynamic> c_data = _dataLists[c_index];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            child: ListTile(
+              title: Text('${c_data["proxyName"]}'),
+              subtitle: Text(
+                  '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () {
+                  if (kDebugMode) {
+                    print("delete item:$c_data");
+                  }
+                  setState(() {
+                    _dataLists.remove(c_data);
+                    _proxyConfigData.deleteProxyConfig(_dataLists);
+                  });
+                },
+              ),
+              onTap: () {
+                if (kDebugMode) {
+                  print("---- ProxyListHome onTap ${c_data}");
+                }
+              },
+            ),
+          );
+        },
+      ),
+      floatingActionButton: AddProxyButton(onDataFetched: handleConfigData),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -38,6 +127,7 @@ class AddProxyButton extends StatelessWidget {
 
   // 定义一个回调，用于处理读取到的数据
   final Function(Map<String, dynamic>) onDataFetched;
+
   @override
   Widget build(BuildContext context) {
     // proxyConfigData.readProxyConfig();
@@ -47,25 +137,18 @@ class AddProxyButton extends StatelessWidget {
           // 使用Navigator.push 实现页面路由跳转，传入当前上下文context和MaterialPageRoute构建器
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const AddProxyWidget()),
-          ).then((value) {
-            if (kDebugMode) {
-              print(value);
-            }
-            if (value != null){
-              // 添加代理配置
-              // ProxyConfigData().addProxyConfig(value);
-              onDataFetched(value);
-            }
-
-          });
+            MaterialPageRoute(
+                builder: (context) => AddProxyWidget(
+                      onDataFetched: onDataFetched,
+                    )),
+          );
         },
         child: Container(
           height: 50.0,
           // 构建一个BoxDecoration对象，用于设置容器的装饰效果
           decoration: BoxDecoration(
             // 设置背景颜色为紫色
-            color: Colors.purple,
+            color: Colors.purple.withOpacity(0.9),
             // 设置边框圆角为24.0
             borderRadius: BorderRadius.circular(15.0),
             boxShadow: [
@@ -101,10 +184,7 @@ class AddProxyButton extends StatelessWidget {
                   // 子组件数组，包括一个图标和一个文本
                   children: [
                     // 添加图标组件
-                    Icon(
-                      Icons.add,
-                      color: Colors.white,
-                    ),
+                    Icon(Icons.add, color: Colors.white),
                     // 在图标和文本之间添加一个宽度为10.0的空白间隔
                     SizedBox(width: 5.0),
                     // 添加文本组件，显示“添加代理”文本

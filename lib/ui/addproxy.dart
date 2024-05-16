@@ -2,8 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
-  const AddProxyWidget({super.key});
-
+  const AddProxyWidget({super.key, required this.onDataFetched});
+  // 定义一个回调，用于处理读取到的数据
+  final Function(Map<String, dynamic>) onDataFetched;
   @override
   State<AddProxyWidget> createState() => _AddProxyWidgetState();
 }
@@ -36,12 +37,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
 
   @override
   Widget build(BuildContext context) {
-    proxyConfig['proxyName'] = "default";
-    proxyConfig['proxyType'] = "http";
-    proxyConfig['proxyHost'] = "192.168.";
-    proxyConfig['proxyPort'] = "8080";
-    proxyConfig['proxyUser'] = "";
-    proxyConfig['proxyPass'] = "";
+
     return Scaffold(
         appBar: AppBar(
           title: const Text("添加代理"),
@@ -67,7 +63,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 // 这俩可以为空
                 proxyConfig['proxyUser'] = _controller_proxyUser.text;
                 proxyConfig['proxyPass'] = _controller_proxyPass.text;
-                Navigator.pop(context, proxyConfig);
+                widget.onDataFetched(proxyConfig);
+                Navigator.pop(context);
               },
             )
           ],
