@@ -18,7 +18,7 @@ class AppConfigState extends State<AppConfigList> {
   List _userAppListInfo = [];
   List _systemAppListInfo = [];
   bool _isShowUserApp = true;
-  bool _isShowSystemApp = true;
+  bool _isShowSystemApp = false;
   static const platform = MethodChannel('cn.ys1231/appproxy');
   late final Map<String, bool> _selectedItemsMap;
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
