@@ -55,9 +55,9 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     _proxyConfigData.addProxyConfig(data).then((value) {
       setState(() {
         _dataLists.add(data);
-        if (kDebugMode) print('Received data: $data');
+        if (kDebugMode) print('Received data: $data _dataLists lenth:${_dataLists.length}');
         // 可能还会根据数据更新state，触发UI重建等
-        _itemCount += 1;
+        _itemCount = _dataLists.length;
       });
     });
   }
@@ -138,7 +138,7 @@ class AddProxyButton extends StatelessWidget {
             MaterialPageRoute(builder: (context) => const AddProxyWidget()),
           ).then((value) {
             if (kDebugMode) {
-              print(value);
+              print("onDataFetched:$value");
             }
             if (value != null) {
               onDataFetched(value);
