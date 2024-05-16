@@ -27,9 +27,13 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: true,
       theme: ThemeData(
         // 使用深紫色作为主题颜色方案的种子颜色
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(142, 0, 244, 1.0)),
-        // 启用Material Design 3主题
-        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          primary: const Color.fromRGBO(149, 0, 255, 1.0),
+          seedColor: const Color.fromRGBO(149, 0, 255, 1.0),
+          secondary: Colors.transparent, // 可选：设置次要颜色为透明，避免产生额外的颜色
+          error: Colors.transparent, // 可选：设置错误颜色为透明，避免产生额外的颜色
+          // 其他颜色也可以根据需要设置为透明或自定义颜色
+        ),
       ),
       // 设置底部导航菜单作为应用的起始页面
       home: const BottomMenuPage(),
@@ -69,9 +73,31 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).primaryColor,
-        title: Text(_appBarTitles[_currentIndex]),
-      ),
+          backgroundColor: Theme.of(context).primaryColor,
+          title: Text(_appBarTitles[_currentIndex]),
+          actions: _appBarTitles[_currentIndex] == "AppConfigList"
+              ? <Widget>[
+                  PopupMenuButton<String>(
+                    // 设置弹出菜单的图标
+                    icon: const Icon(Icons.more_vert),
+                    // 定义菜单项
+                    itemBuilder: (BuildContext context) {
+                      return [
+                        const PopupMenuItem<String>(
+                            value: 'Option_1', child: Text('Option 1')),
+                        const PopupMenuItem<String>(
+                            value: 'Option_2', child: Text('Option 2')),
+                        const PopupMenuItem<String>(
+                            value: 'Option_3', child: Text('Option 3')),
+                      ];
+                    },
+                    // 当选择一个菜单项时触发的回调
+                    onSelected: (String value) {
+                      print('Selected option: $value');
+                    },
+                  )
+                ]
+              : []),
       body: IndexedStack(
         index: _currentIndex,
         children: _children,
