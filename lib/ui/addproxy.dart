@@ -2,8 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
-  const AddProxyWidget({super.key});
-
+  const AddProxyWidget({super.key, required this.onDataFetched});
+  // 定义一个回调，用于处理读取到的数据
+  final Function(Map<String, dynamic>) onDataFetched;
   @override
   State<AddProxyWidget> createState() => _AddProxyWidgetState();
 }
@@ -62,7 +63,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 // 这俩可以为空
                 proxyConfig['proxyUser'] = _controller_proxyUser.text;
                 proxyConfig['proxyPass'] = _controller_proxyPass.text;
-                Navigator.pop(context, proxyConfig);
+                widget.onDataFetched(proxyConfig);
+                Navigator.pop(context);
               },
             )
           ],

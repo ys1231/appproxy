@@ -13,7 +13,6 @@ class ProxyListHome extends StatefulWidget {
 class _ProxyListHomeState extends State<ProxyListHome> {
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
 
-  int _itemCount = 0;
   List<Map<String, dynamic>> _dataLists = [];
   bool _iscalled = false;
 
@@ -37,8 +36,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     try {
       _proxyConfigData.readProxyConfig().then((value) {
         setState(() {
+          _dataLists.clear();
           _dataLists = value ?? [];
-          _itemCount = _dataLists.length;
         });
       });
     } catch (e) {
@@ -52,20 +51,25 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   void handleConfigData(Map<String, dynamic> data) {
     // 在这里处理从 AddProxyButton 返回的数据
-    _proxyConfigData.addProxyConfig(data).then((value) {
-      setState(() {
-        _dataLists.add(data);
-        if (kDebugMode) print('Received data: $data _dataLists lenth:${_dataLists.length}');
-        // 可能还会根据数据更新state，触发UI重建等
-        _itemCount = _dataLists.length;
-      });
+    if (_dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
+      if (kDebugMode) {
+        print("handleConfigData Data already exists in the list, skipping.");
+      }
+      return;
+    }
+    _dataLists.add(data);
+    _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
+    setState(() {
+      if (kDebugMode) {
+        print('Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     if (kDebugMode) {
-      print("---- ProxyListHome build call $_itemCount $_dataLists");
+      print("---- ProxyListHome build call: $_dataLists");
     }
     return Scaffold(
       body: ListView.separated(
@@ -74,7 +78,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         // 设置底部内边距 解决底部按钮遮挡问题
         padding: const EdgeInsets.only(bottom: 70.0),
         // 配置列表个数
-        itemCount: _itemCount,
+        itemCount: _dataLists.length,
         // 设置分隔符零尺寸
         separatorBuilder: (BuildContext context, int index) {
           return const SizedBox.shrink();
@@ -86,7 +90,6 @@ class _ProxyListHomeState extends State<ProxyListHome> {
           Map<String, dynamic> c_data = _dataLists[c_index];
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            key: ValueKey(c_index),
             child: ListTile(
               title: Text('${c_data["proxyName"]}'),
               subtitle: Text(
@@ -98,9 +101,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                     print("delete item:$c_data");
                   }
                   setState(() {
-                    _dataLists.removeAt(c_index);
-                    _itemCount = _dataLists.length;
-                    _proxyConfigData.deleteProxyConfig(c_data);
+                    _dataLists.remove(c_data);
+                    _proxyConfigData.deleteProxyConfig(_dataLists);
                   });
                 },
               ),
@@ -135,15 +137,11 @@ class AddProxyButton extends StatelessWidget {
           // 使用Navigator.push 实现页面路由跳转，传入当前上下文context和MaterialPageRoute构建器
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const AddProxyWidget()),
-          ).then((value) {
-            if (kDebugMode) {
-              print("onDataFetched:$value");
-            }
-            if (value != null) {
-              onDataFetched(value);
-            }
-          });
+            MaterialPageRoute(
+                builder: (context) => AddProxyWidget(
+                      onDataFetched: onDataFetched,
+                    )),
+          );
         },
         child: Container(
           height: 50.0,

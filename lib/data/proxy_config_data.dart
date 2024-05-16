@@ -5,7 +5,7 @@ import 'dart:convert';
 
 class ProxyConfigData {
 
-  List<Map<String, dynamic>> dataConfiglists = [ ];
+  // List<Map<String, dynamic>> dataConfiglists = [ ];
 
   Future<String> get _localPath async {
     final directory = await getApplicationDocumentsDirectory();
@@ -17,32 +17,37 @@ class ProxyConfigData {
     return File('$path/proxyConfig.json');
   }
 
-  Future<void> addProxyConfig(Map<String, dynamic> data) async {
+  Future<void> addProxyConfig(List<Map<String, dynamic>>  data) async {
     final file = await _localFile;
     // Write the file
     if (data.isEmpty ){
       return ;
     }
-    dataConfiglists.add(data);
+    // if (dataConfiglists.any((item) => item['proxyName'] == data['proxyName'])) {
+    //   if (kDebugMode) {
+    //     print("addProxyConfig Data already exists in the list, skipping.");
+    //   }
+    // }else{
+    //   dataConfiglists.add(data);
+    // }
     if (kDebugMode) {
       print("addProxyConfig:$data");
     }
-    String jsonString = jsonEncode(dataConfiglists);
+    String jsonString = jsonEncode(data);
     file.writeAsStringSync(jsonString);
     return ;
   }
 
-  Future<void> deleteProxyConfig(Map<String, dynamic> data) async {
+  Future<void> deleteProxyConfig(List<Map<String, dynamic>>  data) async {
     final file = await _localFile;
     // Write the file
     if (data.isEmpty ){
       return;
     }
-    dataConfiglists.remove(data);
     if (kDebugMode) {
       print("delete ProxyConfig:$data");
     }
-    String jsonString = jsonEncode(dataConfiglists);
+    String jsonString = jsonEncode(data);
     file.writeAsStringSync(jsonString);
     return;
   }
@@ -53,6 +58,7 @@ class ProxyConfigData {
       final file = await _localFile;
       String contents = file.readAsStringSync();
       List<dynamic> decodedList = jsonDecode(contents);
+      List<Map<String, dynamic>> dataConfiglists=[];
       for (var item in decodedList) {
         assert(item is Map<String, dynamic>);
         dataConfiglists.add(item);
