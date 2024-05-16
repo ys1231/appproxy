@@ -1,8 +1,8 @@
 import 'package:appproxy/ui/proxy_config_list.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:appproxy/ui/app_config_list.dart';
 
-import 'ui/app_config_list.dart';
 
 void main() {
   runApp(const MyApp());
@@ -52,22 +52,46 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
   int _currentIndex = 0;
   late List<String> _appBarTitles;
 
+  // 创建globalkey 方便调用子控件方法
+  final GlobalKey<AppConfigState> _appConfigKey = GlobalKey<AppConfigState>();
+  late List<Widget> _children;
+
+  // 初始化菜单项 后续使用feat(UI): :tada: 1. app列表获取新增是否为系统用户字段.
+  //
+  //  2. 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
+  bool _showUserAppisSelected = true;
+  bool _showSystemAppSelected = false;
+  bool _selectAll = false;
+
+
   /// initState函数是在State对象被创建并插入到Widget树中时调用的。
-  /// 这个函数不接受任何参数，并且没有返回值。
-  /// 在这个函数中，我们可以进行一些初始化操作，比如设置状态栏颜色、初始化数据等。
   @override
   void initState() {
     super.initState(); // 调用父类的initState方法
     // 初始化_children列表，包含首页、配置列表和设置页三个Widget
     _children = <Widget>[
       const ProxyListHome(), // 首页Widget
-      const AppConfigList(), // 配置列表Widget，标题变化时更新AppBar标题
+      AppConfigList(key: _appConfigKey),
       const Text('Settings'), // 设置页Widget
     ];
     _appBarTitles = ['ProxyConfig', 'AppConfigList', 'Settings'];
   }
 
-  late List<Widget> _children;
+  // 调用子控件方法传递菜单项选择内容
+  void _onChangedShowUserApp(bool? value) {
+    _appConfigKey.currentState?.updateShowUserApp(value);
+    _showUserAppisSelected = value!;
+  }
+
+  void _onChangedShowSystemApp(bool? value){
+    _appConfigKey.currentState?.updateShowSystemApp(value);
+    _showSystemAppSelected = value!;
+  }
+
+  void _onChangedSelectAll(bool? value){
+    _appConfigKey.currentState?.updateSelectAll(value);
+    _selectAll = value!;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,12 +107,30 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
                     // 定义菜单项
                     itemBuilder: (BuildContext context) {
                       return [
-                        const PopupMenuItem<String>(
-                            value: 'Option_1', child: Text('Option 1')),
-                        const PopupMenuItem<String>(
-                            value: 'Option_2', child: Text('Option 2')),
-                        const PopupMenuItem<String>(
-                            value: 'Option_3', child: Text('Option 3')),
+                        PopupMenuItem<String>(
+                            value: 'showUserApp', child: Row(
+                              children: [
+                                const Text('显示用户应用'),
+                                const Spacer(),
+                                AppConfigListOptionCheckbox(isSelected: _showUserAppisSelected, onChanged: _onChangedShowUserApp)
+                              ],
+                            )),
+                        PopupMenuItem<String>(
+                            value: 'showSystemApp', child: Row(
+                              children: [
+                                const Text('显示系统应用'),
+                                const Spacer(),
+                                AppConfigListOptionCheckbox(isSelected: _showSystemAppSelected, onChanged: _onChangedShowSystemApp)
+                              ],
+                            )),
+                        PopupMenuItem<String>(
+                            value: 'selectAll', child: Row(
+                              children: [
+                                const Text('全选'),
+                                const Spacer(),
+                                AppConfigListOptionCheckbox(isSelected: _selectAll, onChanged: _onChangedSelectAll)
+                              ],
+                            )),
                       ];
                     },
                     // 当选择一个菜单项时触发的回调
@@ -126,4 +168,31 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
       ),
     );
   }
+}
+
+class AppConfigListOptionCheckbox extends StatefulWidget{
+  AppConfigListOptionCheckbox({super.key, required this.isSelected, required this.onChanged});
+  final Function(bool? value) onChanged;
+  bool? isSelected;
+
+  @override
+  State<AppConfigListOptionCheckbox> createState() => _AppConfigListOptionCheckboxState();
+}
+
+class _AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox>{
+
+  @override
+  Widget build(BuildContext context) {
+    return Checkbox(
+        value: widget.isSelected,
+        onChanged: (bool? value)=>{
+          // 把ui刷新控制在内部
+          setState((){
+            widget.onChanged(value);
+            widget.isSelected = value;
+          })
+
+        }
+    );
+    }
 }

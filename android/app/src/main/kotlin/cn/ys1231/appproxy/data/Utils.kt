@@ -36,6 +36,11 @@ class Utils(val context: Context) {
             var appInfoMap = mutableMapOf<String, Any>()
             appInfoMap["label"] = info.loadLabel(pm).toString()
             appInfoMap["packageName"] = info.activityInfo.packageName
+            if (info.activityInfo.applicationInfo.sourceDir.contains("/data")) {
+                appInfoMap["isSystemApp"] = false
+            } else {
+                appInfoMap["isSystemApp"] = true
+            }
             val iconDrawable = info.activityInfo.loadIcon(pm)
             if (iconDrawable != null) {
                 val bitmap = drawableToBitmap(iconDrawable)

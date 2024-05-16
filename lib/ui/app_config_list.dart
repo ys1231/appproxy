@@ -3,22 +3,24 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import '../data/app_proxy_config_data.dart';
 
 class AppConfigList extends StatefulWidget {
   const AppConfigList({super.key});
 
   @override
-  State<AppConfigList> createState() => _AppConfigState();
+  State<AppConfigList> createState() => AppConfigState();
 }
 
-class _AppConfigState extends State<AppConfigList> {
+class AppConfigState extends State<AppConfigList> {
   var _itemCount = 0;
-  late List _jsonAppListInfo;
+  List _jsonAppListInfo = [];
+  List _userAppListInfo = [];
+  List _systemAppListInfo = [];
+  bool _isShowUserApp = true;
+  bool _isShowSystemApp = true;
   static const platform = MethodChannel('cn.ys1231/appproxy');
   late final Map<String, bool> _selectedItemsMap;
-  late Future<bool> _calculation;
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
 
   @override
@@ -27,7 +29,6 @@ class _AppConfigState extends State<AppConfigList> {
     if (kDebugMode) {
       print("iyue-> initState");
     }
-    // _calculation = getAppList();
     _initData().then((value) => null);
   }
 
@@ -36,18 +37,78 @@ class _AppConfigState extends State<AppConfigList> {
     _selectedItemsMap = await _appfile.readAppConfig();
   }
 
-  /// 远程调用获取Android 应用列表
+  // 更新选项
+  void updateShowUserApp(isShowUserApp) {
+    _isShowUserApp = isShowUserApp;
+    setState(() {
+      getAppList();
+      if (kDebugMode) {
+        print("updateShowUserApp:$isShowUserApp");
+      }
+    });
+  }
+
+  void updateShowSystemApp(isShowSystemApp) {
+    _isShowSystemApp = isShowSystemApp;
+    setState(() {
+      getAppList();
+      if (kDebugMode) {
+        print("updateShowSystemApp:$isShowSystemApp");
+      }
+    });
+  }
+
+  void updateSelectAll(isSelectAll) {
+    setState(() {
+      if (kDebugMode) {
+        print("updateSelectAll:$isSelectAll");
+      }
+      if (isSelectAll){
+        for (var app in _jsonAppListInfo) {
+          _selectedItemsMap[app["packageName"]] = true;
+        }
+      }else{
+        _selectedItemsMap.clear();
+      }
+    });
+  }
+
+  // 远程调用获取Android 应用列表
   Future<bool> getAppList() async {
+
     try {
       if (kDebugMode) {
         print("iyue-> getAppList");
       }
+
+      // 远程调用获取应用列表
       final appList = await platform.invokeMethod('getAppList');
-      _jsonAppListInfo = jsonDecode(appList);
-      // print("iyue-<getAppList> _itemCount:$_itemCount");
-      _jsonAppListInfo.sort((a,b){
-        bool? itemASelected = _selectedItemsMap[a["packageName"]]?? false;
-        bool? itemBSelected = _selectedItemsMap[b["packageName"]]?? false;
+      List tmp = jsonDecode(appList);
+      _jsonAppListInfo.clear();
+      _systemAppListInfo.clear();
+      _userAppListInfo.clear();
+      for (Map<String, dynamic> appInfo in tmp) {
+        if (appInfo["isSystemApp"]) {
+          _systemAppListInfo.add(appInfo);
+        } else {
+          _userAppListInfo.add(appInfo);
+        }
+
+      }
+
+      // 是否显示系统应用
+      if (_isShowSystemApp) {
+        _jsonAppListInfo.addAll(_systemAppListInfo);
+      }
+      // 是否显示用户应用
+      if (_isShowUserApp) {
+        _jsonAppListInfo.addAll(_userAppListInfo);
+      }
+
+      // 把已选择的移到前面去
+      _jsonAppListInfo.sort((a, b) {
+        bool? itemASelected = _selectedItemsMap[a["packageName"]] ?? false;
+        bool? itemBSelected = _selectedItemsMap[b["packageName"]] ?? false;
         // 如果两个都未选中，保持原顺序
         if (!itemASelected && !itemBSelected) return 0;
         // 如果A被选中，放在前面
@@ -57,9 +118,7 @@ class _AppConfigState extends State<AppConfigList> {
         // 如果两个都已选中，按原始顺序
         return 0;
       });
-      // setState(() {
-        _itemCount = _jsonAppListInfo.length;
-      // });
+      _itemCount = _jsonAppListInfo.length;
       return true;
     } on PlatformException catch (e) {
       if (kDebugMode) {
@@ -82,7 +141,6 @@ class _AppConfigState extends State<AppConfigList> {
     if (kDebugMode) {
       print("iyue-<build> _itemCount:$_itemCount");
     }
-
     /**
      * 构建一个FutureBuilder，用于根据计算的状态显示不同的内容。
      *
@@ -90,14 +148,16 @@ class _AppConfigState extends State<AppConfigList> {
      */
     return FutureBuilder(
         future: getAppList(), // 用于FutureBuilder的异步计算
-        builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) { // 异步快照的构建器回调
+        builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
+          // 异步快照的构建器回调
           // 当计算状态为等待时，显示加载动画
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               // 显示一个加载动画
               child: CircularProgressIndicator(),
             );
-          } else if (snapshot.hasError) { // 当计算出现错误时，显示错误信息
+          } else if (snapshot.hasError) {
+            // 当计算出现错误时，显示错误信息
             return Center(
               child: Text('Error: ${snapshot.error}'),
             );
@@ -108,12 +168,10 @@ class _AppConfigState extends State<AppConfigList> {
                 // 当调用此函数时，会延迟1秒后执行[getAppList]函数
                 return Future.delayed(const Duration(seconds: 1), () {
                   setState(() {
-                    getAppList();
                     if (kDebugMode) {
                       print("onRefresh");
                     }
                   });
-
                 });
               },
               // 带滚动条的列表
@@ -122,7 +180,8 @@ class _AppConfigState extends State<AppConfigList> {
                 child: ListView.separated(
                   physics: const BouncingScrollPhysics(),
                   // 返回一个零尺寸的SizedBox
-                  separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
+                  separatorBuilder: (BuildContext context, int index) =>
+                      const SizedBox.shrink(),
                   // 列表项数量
                   itemCount: _itemCount,
                   // 列表项构建器
@@ -130,14 +189,16 @@ class _AppConfigState extends State<AppConfigList> {
                     Map<String, dynamic> listItem = _jsonAppListInfo[c_index];
                     // 返回一个卡片
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0,vertical: 4.0) ,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 8.0, vertical: 4.0),
                       key: ValueKey(c_index),
                       // 列表项内容
                       child: ListTile(
                         // 设置水平标题间距
                         horizontalTitleGap: 20,
                         // 设置内容内边距
-                        contentPadding: const EdgeInsets.symmetric( vertical: 0.0, horizontal: 16.0),
+                        contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0.0, horizontal: 16.0),
                         // 显示一个图标icon
                         leading: SizedBox(
                           width: 38, // 设置宽度
@@ -153,10 +214,13 @@ class _AppConfigState extends State<AppConfigList> {
                         subtitle: Text(listItem["packageName"]),
                         // 显示一个复选框
                         trailing: CardCheckbox(
-                            isSelected: _selectedItemsMap[listItem["packageName"]] ?? false,
+                            isSelected:
+                                _selectedItemsMap[listItem["packageName"]] ??
+                                    false,
                             index: c_index,
                             callbackOnChanged: (newValue) {
-                              _selectedItemsMap[listItem["packageName"]] = newValue;
+                              _selectedItemsMap[listItem["packageName"]] =
+                                  newValue;
                               _appfile.saveAppConfig(_selectedItemsMap);
                             }),
                       ),
@@ -173,12 +237,13 @@ class _AppConfigState extends State<AppConfigList> {
 class CardCheckbox extends StatefulWidget {
   CardCheckbox(
       {super.key,
-      required bool isSelected,
+      required this.isSelected,
       required this.index,
-      required this.callbackOnChanged})
-      : _isSelected = isSelected;
+      required this.callbackOnChanged});
+
+  // 构造函数
   Function(bool) callbackOnChanged;
-  bool _isSelected = false;
+  bool isSelected;
   int index = 0;
 
   @override
@@ -188,19 +253,19 @@ class CardCheckbox extends StatefulWidget {
 class _CardCheckboxState extends State<CardCheckbox> {
   void toggleCheckbox() {
     setState(() {
-      widget._isSelected = !widget._isSelected;
-      widget.callbackOnChanged(widget._isSelected);
+      widget.isSelected = !widget.isSelected;
+      widget.callbackOnChanged(widget.isSelected);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Checkbox(
-      value: widget._isSelected,
+      value: widget.isSelected,
       onChanged: (bool? newValue) {
         widget.callbackOnChanged(newValue!);
         setState(() {
-          widget._isSelected = newValue;
+          widget.isSelected = newValue;
         });
         // 如果需要，这里可以处理选中项的变化逻辑
         if (kDebugMode) {
