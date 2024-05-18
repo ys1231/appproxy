@@ -54,15 +54,13 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
 
   // 创建globalkey 方便调用子控件方法
   final GlobalKey<AppConfigState> _appConfigKey = GlobalKey<AppConfigState>();
+  final GlobalKey<AppConfigListOptionCheckboxState> _appOptionKey = GlobalKey<AppConfigListOptionCheckboxState>();
   late List<Widget> _children;
 
-  // 初始化菜单项 后续使用feat(UI): :tada: 1. app列表获取新增是否为系统用户字段.
-  //
-  //  2. 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
+  // 2. 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
   bool _showUserAppisSelected = true;
   bool _showSystemAppSelected = false;
   bool _selectAll = false;
-
 
   /// initState函数是在State对象被创建并插入到Widget树中时调用的。
   @override
@@ -81,11 +79,15 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
   void _onChangedShowUserApp(bool? value) {
     _appConfigKey.currentState?.updateShowUserApp(value);
     _showUserAppisSelected = value!;
+    _appOptionKey.currentState?.updateSelect(false);
+    _selectAll = false;
   }
 
   void _onChangedShowSystemApp(bool? value){
     _appConfigKey.currentState?.updateShowSystemApp(value);
     _showSystemAppSelected = value!;
+    _appOptionKey.currentState?.updateSelect(false);
+    _selectAll = false;
   }
 
   void _onChangedSelectAll(bool? value){
@@ -128,7 +130,7 @@ class _BottomMenuPageState extends State<BottomMenuPage> {
                               children: [
                                 const Text('全选'),
                                 const Spacer(),
-                                AppConfigListOptionCheckbox(isSelected: _selectAll, onChanged: _onChangedSelectAll)
+                                AppConfigListOptionCheckbox(key:_appOptionKey,isSelected: _selectAll, onChanged: _onChangedSelectAll)
                               ],
                             )),
                       ];
@@ -176,10 +178,16 @@ class AppConfigListOptionCheckbox extends StatefulWidget{
   bool? isSelected;
 
   @override
-  State<AppConfigListOptionCheckbox> createState() => _AppConfigListOptionCheckboxState();
+  State<AppConfigListOptionCheckbox> createState() => AppConfigListOptionCheckboxState();
 }
 
-class _AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox>{
+class AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox>{
+
+  void updateSelect(bool? value){
+    setState((){
+      widget.isSelected = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

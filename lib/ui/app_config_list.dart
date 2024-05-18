@@ -19,9 +19,12 @@ class AppConfigState extends State<AppConfigList> {
   List _systemAppListInfo = [];
   bool _isShowUserApp = true;
   bool _isShowSystemApp = false;
+  bool _isSelectAll = false;
   static const platform = MethodChannel('cn.ys1231/appproxy');
   late final Map<String, bool> _selectedItemsMap;
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
+
+
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class AppConfigState extends State<AppConfigList> {
     _isShowUserApp = isShowUserApp;
     setState(() {
       getAppList();
+      _selectedItemsMap.clear();
       if (kDebugMode) {
         print("updateShowUserApp:$isShowUserApp");
       }
@@ -52,6 +56,7 @@ class AppConfigState extends State<AppConfigList> {
     _isShowSystemApp = isShowSystemApp;
     setState(() {
       getAppList();
+      _selectedItemsMap.clear();
       if (kDebugMode) {
         print("updateShowSystemApp:$isShowSystemApp");
       }
@@ -59,6 +64,7 @@ class AppConfigState extends State<AppConfigList> {
   }
 
   void updateSelectAll(isSelectAll) {
+    _isSelectAll = isSelectAll;
     setState(() {
       if (kDebugMode) {
         print("updateSelectAll:$isSelectAll");
@@ -93,7 +99,6 @@ class AppConfigState extends State<AppConfigList> {
         } else {
           _userAppListInfo.add(appInfo);
         }
-
       }
 
       // 是否显示系统应用
@@ -119,6 +124,7 @@ class AppConfigState extends State<AppConfigList> {
         return 0;
       });
       _itemCount = _jsonAppListInfo.length;
+
       return true;
     } on PlatformException catch (e) {
       if (kDebugMode) {
@@ -196,9 +202,9 @@ class AppConfigState extends State<AppConfigList> {
                       child: ListTile(
                         // 设置水平标题间距
                         horizontalTitleGap: 20,
+                        // textColor:Colors.deepOrangeAccent,
                         // 设置内容内边距
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 0.0, horizontal: 16.0),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0.0, horizontal: 16.0),
                         // 显示一个图标icon
                         leading: SizedBox(
                           width: 38, // 设置宽度
