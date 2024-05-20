@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../data/proxy_config_data.dart';
 import 'addproxy.dart';
 
@@ -11,10 +12,16 @@ class ProxyListHome extends StatefulWidget {
 }
 
 class _ProxyListHomeState extends State<ProxyListHome> {
+  // 配置文件操作类
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
-
+  // 配置文件数据
   List<Map<String, dynamic>> _dataLists = [];
+  // 控制只初始化读取一次配置文件
   bool _iscalled = false;
+  // 当前选中代理名称
+  String _isSelected = "";
+  //
+  static const platform = MethodChannel("cn.ys1231/appproxy/vpn");
 
   @override
   void initState() {
@@ -34,6 +41,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     _iscalled = true;
     try {
+      // 初始化历史代理配置
       _proxyConfigData.readProxyConfig().then((value) {
         setState(() {
           _dataLists.clear();
@@ -45,12 +53,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         print("---- ProxyListHome initProxyConfig error $e");
       }
     }
-
-    return;
   }
 
+  // 在这里处理从 AddProxyButton 返回的数据 添加代理配置到列表
   void handleConfigData(Map<String, dynamic> data) {
-    // 在这里处理从 AddProxyButton 返回的数据
     if (_dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
       if (kDebugMode) {
         print("handleConfigData Data already exists in the list, skipping.");
@@ -65,6 +71,94 @@ class _ProxyListHomeState extends State<ProxyListHome> {
       }
     });
   }
+
+  // 删除列表中的代理配置
+  void deletetoProxyConfig(Map<String, dynamic> data) {
+    _dataLists.removeWhere((item) => item['proxyName'] == data['proxyName']);
+    _proxyConfigData.deleteProxyConfig(_dataLists);
+    setState(() {
+      if (kDebugMode) {
+        print('delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      }
+    });
+  }
+
+  // 显示提示是否删除代理
+  Future<void> _showDeleteDialog(BuildContext context, Map<String, dynamic> data) async {
+    bool isDelete = await showDialog(
+        context: context,
+        builder: (BuildContext context){
+          return  AlertDialog(
+            title: const Text("提示"),
+            content: const Text("是否删除该代理配置？"),
+            actions: [
+              TextButton(
+                child: const Text("取消"),
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: const Text("确定"),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+              ),
+            ],
+          );
+        }
+    );
+    if (isDelete){
+      deletetoProxyConfig(data);
+    }
+  }
+
+  // 启动VPN
+  void _startProxy(Map<String, dynamic> data) async {
+    if (kDebugMode) {
+      print("---- ProxyListHome startVpn call: $data");
+    }
+    try {
+      bool result = await platform.invokeMethod('startVpn', data);
+      if (result) {
+        if (kDebugMode) {
+          print("---- ProxyListHome startVpn: $data success");
+        }
+      } else {
+        if (kDebugMode) {
+          print("---- ProxyListHome startVpn: $data fail");
+        }
+        _isSelected = "";
+      }
+    } on PlatformException catch (e) {
+      if (kDebugMode) {
+        print("Failed to start proxy: '${e.message}'.");
+      }
+    }
+  }
+
+  // 关闭VPN
+  void _stopProxy() async {
+    if (kDebugMode) {
+      print("---- ProxyListHome stopVpn call");
+    }
+    try {
+      bool result = await platform.invokeMethod('stopVpn');
+      if (result) {
+        if (kDebugMode) {
+          print("---- ProxyListHome stopVpn success");
+        }
+      } else {
+        if (kDebugMode) {
+          print("---- ProxyListHome stopVpn fail");
+        }
+     }
+   } on PlatformException catch (e) {
+      if (kDebugMode) {
+        print("Failed to stop proxy: '${e.message}'.");
+      }
+    }
+ }
 
   @override
   Widget build(BuildContext context) {
@@ -84,32 +178,35 @@ class _ProxyListHomeState extends State<ProxyListHome> {
           return const SizedBox.shrink();
         },
         itemBuilder: (BuildContext context, int c_index) {
-          if (kDebugMode) {
-            print("---- ProxyListHome c_index: $c_index ");
-          }
           Map<String, dynamic> c_data = _dataLists[c_index];
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: ListTile(
-              title: Text('${c_data["proxyName"]}'),
-              subtitle: Text(
-                  '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () {
-                  if (kDebugMode) {
-                    print("delete item:$c_data");
-                  }
+            child: GestureDetector(
+              child: SwitchListTile(
+                value: _isSelected == c_data["proxyName"] ? true : false,
+                title: Text('${c_data["proxyName"]}'),
+                subtitle: Text(
+                    '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+                onChanged: (bool value) {
                   setState(() {
-                    _dataLists.remove(c_data);
-                    _proxyConfigData.deleteProxyConfig(_dataLists);
+                    if (value) {
+                      _isSelected = c_data["proxyName"];
+                      _startProxy(c_data);
+                    } else {
+                      _stopProxy();
+                      _isSelected = "";
+                    }
+                    if (kDebugMode) {
+                      print("current index:$c_index select: $_isSelected");
+                    }
                   });
                 },
               ),
-              onTap: () {
+              onLongPress: (){
                 if (kDebugMode) {
-                  print("---- ProxyListHome onTap ${c_data}");
+                  print("long press delete:${c_data["proxyName"]}");
                 }
+                _showDeleteDialog(context, c_data);
               },
             ),
           );

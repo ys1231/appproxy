@@ -1,25 +1,91 @@
 package cn.ys1231.appproxy
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.VpnService
+import android.util.Log
+import cn.ys1231.appproxy.IyueService.IyueVPNService
 import cn.ys1231.appproxy.data.Utils
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.BasicMessageChannel
 import io.flutter.plugin.common.MethodChannel
+import java.util.Objects
 
-class MainActivity: FlutterActivity(){
+class MainActivity : FlutterActivity() {
+    private val TAG = "iyue->${this.javaClass.simpleName}"
     private val CHANNEL = "cn.ys1231/appproxy"
+    private val CHANNEL_VPN = "cn.ys1231/appproxy/vpn"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "getAppList"){
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            CHANNEL
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "getAppList") {
                 try {
+                    Log.d(TAG, "configureFlutterEngine ${call.method} ")
                     val appList = Utils(this).getAppList()
                     result.success(appList)
-                }catch (e: Exception){
+                } catch (e: Exception) {
+                    result.error("-1", e.message, null)
+                }
+
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            CHANNEL_VPN
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "startVpn") {
+                try {
+                    val proxy: Map<String, Any>? = call.arguments<Map<String, Any>>()
+                    startVpn(this,proxy)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("-1", e.message, null)
+                }
+            }else if (call.method == "stopVpn") {
+                try {
+                    stopVpn(this)
+                    result.success(true)
+                } catch (e: Exception) {
                     result.error("-1", e.message, null)
                 }
             }
+
         }
     }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == VPN_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK) {
+                // 用户授权成功，启动VPN服务
+                Log.d(TAG, "onActivityResult: 用户授权成功，启动VPN服务 ")
+                startService(Intent(this, IyueVPNService::class.java))
+            } else {
+                // 用户拒绝授权，处理相应逻辑
+                Log.d(TAG, "onActivityResult: 用户拒绝授权 ")
+                // 在这里可以通知Flutter层授权失败
+            }
+        }
+    }
+
+    private val VPN_REQUEST_CODE = 100
+    private fun startVpn(context: Context, proxy:Map<String,Any>?) {
+        Log.d(TAG, "startVpn: $proxy")
+        var intent = VpnService.prepare(context)
+        if (intent != null) {
+            this.startActivityForResult(intent, VPN_REQUEST_CODE)
+        } else {
+            context.startService(Intent(context, IyueVPNService::class.java))
+        }
+    }
+    private fun stopVpn(context: Context) {
+
+    }
+
 }

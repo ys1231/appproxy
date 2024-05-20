@@ -36,19 +36,19 @@ class MyApp extends StatelessWidget {
         ),
       ),
       // 设置底部导航菜单作为应用的起始页面
-      home: const BottomMenuPage(),
+      home: const iyueMainPage(),
     );
   }
 }
 
-class BottomMenuPage extends StatefulWidget {
-  const BottomMenuPage({super.key});
+class iyueMainPage extends StatefulWidget {
+  const iyueMainPage({super.key});
 
   @override
-  State<BottomMenuPage> createState() => _BottomMenuPageState();
+  State<iyueMainPage> createState() => _iyueMainPageState();
 }
 
-class _BottomMenuPageState extends State<BottomMenuPage> {
+class _iyueMainPageState extends State<iyueMainPage> {
   int _currentIndex = 0;
   late List<String> _appBarTitles;
 

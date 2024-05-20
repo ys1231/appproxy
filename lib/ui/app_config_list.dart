@@ -19,12 +19,9 @@ class AppConfigState extends State<AppConfigList> {
   List _systemAppListInfo = [];
   bool _isShowUserApp = true;
   bool _isShowSystemApp = false;
-  bool _isSelectAll = false;
   static const platform = MethodChannel('cn.ys1231/appproxy');
   late final Map<String, bool> _selectedItemsMap;
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
-
-
 
   @override
   void initState() {
@@ -64,7 +61,6 @@ class AppConfigState extends State<AppConfigList> {
   }
 
   void updateSelectAll(isSelectAll) {
-    _isSelectAll = isSelectAll;
     setState(() {
       if (kDebugMode) {
         print("updateSelectAll:$isSelectAll");
