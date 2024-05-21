@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:appproxy/ui/app_config_list.dart';
 
-
 void main() {
   runApp(const MyApp());
 }
@@ -68,8 +67,11 @@ class _iyueMainPageState extends State<iyueMainPage> {
     super.initState(); // 调用父类的initState方法
     // 初始化_children列表，包含首页、配置列表和设置页三个Widget
     _children = <Widget>[
-      const ProxyListHome(), // 首页Widget
+      // 首页Widget
+      const ProxyListHome(),
+      // app配置列表
       AppConfigList(key: _appConfigKey),
+      // 设置页面 TODO
       const Text('Settings'), // 设置页Widget
     ];
     _appBarTitles = ['ProxyConfig', 'AppConfigList', 'Settings'];

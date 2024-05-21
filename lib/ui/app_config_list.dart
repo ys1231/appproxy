@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../data/app_proxy_config_data.dart';
+import 'package:appproxy/data/app_proxy_config_data.dart';
+import 'package:appproxy/events/app_events.dart';
 
 class AppConfigList extends StatefulWidget {
   const AppConfigList({super.key});
@@ -82,7 +83,6 @@ class AppConfigState extends State<AppConfigList> {
       if (kDebugMode) {
         print("iyue-> getAppList");
       }
-
       // 远程调用获取应用列表
       final appList = await platform.invokeMethod('getAppList');
       List tmp = jsonDecode(appList);
@@ -220,6 +220,12 @@ class AppConfigState extends State<AppConfigList> {
                               callbackOnChanged: (newValue) {
                                 _selectedItemsMap[listItem["packageName"]] = newValue;
                                 _appfile.saveAppConfig(_selectedItemsMap);
+                                if (newValue){
+                                  // 添加到代理列表
+                                  appProxyPackageList.add(listItem["packageName"]);
+                                }else{
+                                  appProxyPackageList.remove(listItem["packageName"]);
+                                }
                               }),
                           onTap: () {
                             // 调用子控件选择或取消选中 并回调 callbackOnChanged 更新数据

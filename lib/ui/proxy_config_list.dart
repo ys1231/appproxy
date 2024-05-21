@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../data/proxy_config_data.dart';
+import 'package:appproxy/data/proxy_config_data.dart';
 import 'addproxy.dart';
+import 'package:appproxy/events/app_events.dart';
 
 class ProxyListHome extends StatefulWidget {
   const ProxyListHome({super.key});
@@ -19,9 +22,11 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   // 控制只初始化读取一次配置文件
   bool _iscalled = false;
   // 当前选中代理名称
-  String _isSelected = "";
-  //
+  String _isSelectedProxyName = "";
+  // 方法调用通道
   static const platform = MethodChannel("cn.ys1231/appproxy/vpn");
+  // 当前需要启动的代理配置
+  Map<String, dynamic> _currentData = {};
 
   @override
   void initState() {
@@ -114,21 +119,22 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   // 启动VPN
-  void _startProxy(Map<String, dynamic> data) async {
+  void _startProxy() async {
     if (kDebugMode) {
-      print("---- ProxyListHome startVpn call: $data");
+      print("---- ProxyListHome startVpn call: $_currentData");
     }
+    _currentData['appProxyPackageList'] = appProxyPackageList.getList();
     try {
-      bool result = await platform.invokeMethod('startVpn', data);
+      bool result = await platform.invokeMethod('startVpn', _currentData);
       if (result) {
         if (kDebugMode) {
-          print("---- ProxyListHome startVpn: $data success");
+          print("---- ProxyListHome startVpn: $_currentData success");
         }
       } else {
         if (kDebugMode) {
-          print("---- ProxyListHome startVpn: $data fail");
+          print("---- ProxyListHome startVpn: $_currentData fail");
         }
-        _isSelected = "";
+        _isSelectedProxyName = "";
       }
     } on PlatformException catch (e) {
       if (kDebugMode) {
@@ -183,21 +189,22 @@ class _ProxyListHomeState extends State<ProxyListHome> {
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: GestureDetector(
               child: SwitchListTile(
-                value: _isSelected == c_data["proxyName"] ? true : false,
+                value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
                 title: Text('${c_data["proxyName"]}'),
                 subtitle: Text(
                     '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
                 onChanged: (bool value) {
                   setState(() {
                     if (value) {
-                      _isSelected = c_data["proxyName"];
-                      _startProxy(c_data);
+                      _isSelectedProxyName = c_data["proxyName"];
+                      _currentData = c_data;
+                      _startProxy();
                     } else {
                       _stopProxy();
-                      _isSelected = "";
+                      _isSelectedProxyName = "";
                     }
                     if (kDebugMode) {
-                      print("current index:$c_index select: $_isSelected");
+                      print("current index:$c_index select: $_isSelectedProxyName");
                     }
                   });
                 },
