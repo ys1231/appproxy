@@ -22,6 +22,7 @@ class AppConfigState extends State<AppConfigList> {
   static const platform = MethodChannel('cn.ys1231/appproxy');
   late final Map<String, bool> _selectedItemsMap;
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
+  List<GlobalKey<CardCheckboxState>> _cardKeys = [];
 
   @override
   void initState() {
@@ -65,11 +66,11 @@ class AppConfigState extends State<AppConfigList> {
       if (kDebugMode) {
         print("updateSelectAll:$isSelectAll");
       }
-      if (isSelectAll){
+      if (isSelectAll) {
         for (var app in _jsonAppListInfo) {
           _selectedItemsMap[app["packageName"]] = true;
         }
-      }else{
+      } else {
         _selectedItemsMap.clear();
       }
     });
@@ -77,7 +78,6 @@ class AppConfigState extends State<AppConfigList> {
 
   // 远程调用获取Android 应用列表
   Future<bool> getAppList() async {
-
     try {
       if (kDebugMode) {
         print("iyue-> getAppList");
@@ -137,15 +137,9 @@ class AppConfigState extends State<AppConfigList> {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      //   在当前帧构建完成后，调用onTitleChange
-    });
-    if (kDebugMode) {
-      print("iyue-<build> _itemCount:$_itemCount");
-    }
+
     /**
      * 构建一个FutureBuilder，用于根据计算的状态显示不同的内容。
-     *
      * @return 返回一个FutureBuilder，根据计算的状态显示加载动画、错误信息或计算结果。
      */
     return FutureBuilder(
@@ -164,6 +158,9 @@ class AppConfigState extends State<AppConfigList> {
               child: Text('Error: ${snapshot.error}'),
             );
           } else {
+            // 够建用于调用子控件CheckBox的key
+            _cardKeys.clear();
+            _cardKeys = List.generate(_itemCount, (index) => GlobalKey<CardCheckboxState>());
             // 带刷新的动态列表
             return RefreshIndicator(
               onRefresh: () {
@@ -196,36 +193,41 @@ class AppConfigState extends State<AppConfigList> {
                       key: ValueKey(c_index),
                       // 列表项内容
                       child: ListTile(
-                        // 设置水平标题间距
-                        horizontalTitleGap: 20,
-                        // textColor:Colors.deepOrangeAccent,
-                        // 设置内容内边距
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0.0, horizontal: 16.0),
-                        // 显示一个图标icon
-                        leading: SizedBox(
-                          width: 38, // 设置宽度
-                          height: 38, // 设置高度
-                          child: Image.memory(
-                            base64Decode(listItem["iconBytes"]),
-                            fit: BoxFit.cover, // 保持图片的宽高比
+                          // 设置水平标题间距
+                          horizontalTitleGap: 20,
+                          // textColor:Colors.deepOrangeAccent,
+                          // 设置内容内边距
+                          contentPadding: const EdgeInsets.symmetric(
+                              vertical: 0.0, horizontal: 16.0),
+                          // 显示一个图标icon
+                          leading: SizedBox(
+                            width: 38, // 设置宽度
+                            height: 38, // 设置高度
+                            child: Image.memory(
+                              base64Decode(listItem["iconBytes"]),
+                              fit: BoxFit.cover, // 保持图片的宽高比
+                            ),
                           ),
-                        ),
-                        // 标题
-                        title: Text(listItem["label"]),
-                        // 副标题
-                        subtitle: Text(listItem["packageName"]),
-                        // 显示一个复选框
-                        trailing: CardCheckbox(
-                            isSelected:
-                                _selectedItemsMap[listItem["packageName"]] ??
-                                    false,
-                            index: c_index,
-                            callbackOnChanged: (newValue) {
-                              _selectedItemsMap[listItem["packageName"]] =
-                                  newValue;
-                              _appfile.saveAppConfig(_selectedItemsMap);
-                            }),
-                      ),
+                          // 标题
+                          title: Text(listItem["label"]),
+                          // 副标题
+                          subtitle: Text(listItem["packageName"]),
+                          // 显示一个复选框
+                          trailing: CardCheckbox(
+                            key: _cardKeys[c_index],
+                              isSelected: _selectedItemsMap[listItem["packageName"]] ?? false,
+                              // 子控件回调这个函数更新界面对应的数据
+                              callbackOnChanged: (newValue) {
+                                _selectedItemsMap[listItem["packageName"]] = newValue;
+                                _appfile.saveAppConfig(_selectedItemsMap);
+                              }),
+                          onTap: () {
+                            // 调用子控件选择或取消选中 并回调 callbackOnChanged 更新数据
+                            _cardKeys[c_index].currentState!.toggleCheckbox();
+                            if (kDebugMode) {
+                              print("onTap:${listItem["packageName"]}");
+                            }
+                          }),
                     );
                   },
                 ),
@@ -240,19 +242,19 @@ class CardCheckbox extends StatefulWidget {
   CardCheckbox(
       {super.key,
       required this.isSelected,
-      required this.index,
       required this.callbackOnChanged});
 
   // 构造函数
   Function(bool) callbackOnChanged;
   bool isSelected;
-  int index = 0;
 
   @override
-  State<StatefulWidget> createState() => _CardCheckboxState();
+  State<StatefulWidget> createState() => CardCheckboxState();
 }
 
-class _CardCheckboxState extends State<CardCheckbox> {
+class CardCheckboxState extends State<CardCheckbox> {
+
+  // 外部调用刷新checkbox
   void toggleCheckbox() {
     setState(() {
       widget.isSelected = !widget.isSelected;
