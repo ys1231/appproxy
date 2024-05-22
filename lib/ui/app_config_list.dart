@@ -37,6 +37,12 @@ class AppConfigState extends State<AppConfigList> {
   // 初始化数据
   Future<void> _initData() async {
     _selectedItemsMap = await _appfile.readAppConfig();
+    // 同步已选择历史数据
+    for (var key in _selectedItemsMap.keys) {
+      if (_selectedItemsMap[key] == true) {
+        appProxyPackageList.add(key);
+      }
+    }
   }
 
   // 更新选项
@@ -137,7 +143,6 @@ class AppConfigState extends State<AppConfigList> {
 
   @override
   Widget build(BuildContext context) {
-
     /**
      * 构建一个FutureBuilder，用于根据计算的状态显示不同的内容。
      * @return 返回一个FutureBuilder，根据计算的状态显示加载动画、错误信息或计算结果。
@@ -179,8 +184,7 @@ class AppConfigState extends State<AppConfigList> {
                 child: ListView.separated(
                   physics: const BouncingScrollPhysics(),
                   // 返回一个零尺寸的SizedBox
-                  separatorBuilder: (BuildContext context, int index) =>
-                      const SizedBox.shrink(),
+                  separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
                   // 列表项数量
                   itemCount: _itemCount,
                   // 列表项构建器
@@ -188,8 +192,7 @@ class AppConfigState extends State<AppConfigList> {
                     Map<String, dynamic> listItem = _jsonAppListInfo[c_index];
                     // 返回一个卡片
                     return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 8.0, vertical: 4.0),
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                       key: ValueKey(c_index),
                       // 列表项内容
                       child: ListTile(
@@ -197,8 +200,8 @@ class AppConfigState extends State<AppConfigList> {
                           horizontalTitleGap: 20,
                           // textColor:Colors.deepOrangeAccent,
                           // 设置内容内边距
-                          contentPadding: const EdgeInsets.symmetric(
-                              vertical: 0.0, horizontal: 16.0),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 0.0, horizontal: 16.0),
                           // 显示一个图标icon
                           leading: SizedBox(
                             width: 38, // 设置宽度
@@ -214,16 +217,16 @@ class AppConfigState extends State<AppConfigList> {
                           subtitle: Text(listItem["packageName"]),
                           // 显示一个复选框
                           trailing: CardCheckbox(
-                            key: _cardKeys[c_index],
+                              key: _cardKeys[c_index],
                               isSelected: _selectedItemsMap[listItem["packageName"]] ?? false,
                               // 子控件回调这个函数更新界面对应的数据
                               callbackOnChanged: (newValue) {
                                 _selectedItemsMap[listItem["packageName"]] = newValue;
                                 _appfile.saveAppConfig(_selectedItemsMap);
-                                if (newValue){
+                                if (newValue) {
                                   // 添加到代理列表
                                   appProxyPackageList.add(listItem["packageName"]);
-                                }else{
+                                } else {
                                   appProxyPackageList.remove(listItem["packageName"]);
                                 }
                               }),
@@ -245,10 +248,7 @@ class AppConfigState extends State<AppConfigList> {
 }
 
 class CardCheckbox extends StatefulWidget {
-  CardCheckbox(
-      {super.key,
-      required this.isSelected,
-      required this.callbackOnChanged});
+  CardCheckbox({super.key, required this.isSelected, required this.callbackOnChanged});
 
   // 构造函数
   Function(bool) callbackOnChanged;
@@ -259,7 +259,6 @@ class CardCheckbox extends StatefulWidget {
 }
 
 class CardCheckboxState extends State<CardCheckbox> {
-
   // 外部调用刷新checkbox
   void toggleCheckbox() {
     setState(() {
