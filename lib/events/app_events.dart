@@ -5,30 +5,34 @@ import 'package:flutter/foundation.dart';
 // EventBus eventBus = EventBus();
 
 // 传递需要代理的app包名
-class AppProxyPackageList{
+class AppProxyPackageList {
   final Set<String> _proxyPackageList = {};
+
   // AppProxyPackageList(this.appProxyPackageList);
 
-  void add(String appPackageName){
-    if(kDebugMode){
+  void add(String appPackageName) {
+    if (kDebugMode) {
       print("add:$appPackageName");
     }
     _proxyPackageList.add(appPackageName);
   }
-  void remove(String appPackageName){
-    if(kDebugMode){
+
+  void remove(String appPackageName) {
+    if (kDebugMode) {
       print("remove:$appPackageName");
     }
     _proxyPackageList.remove(appPackageName);
   }
-  void clear(){
-    if(kDebugMode){
+
+  void clear() {
+    if (kDebugMode) {
       print("clear appPackageName");
     }
     _proxyPackageList.clear();
   }
-  List<String> getList(){
-    if(kDebugMode){
+
+  List<String> getList() {
+    if (kDebugMode) {
       print("getList:${_proxyPackageList.toList()}");
     }
     return _proxyPackageList.toList();

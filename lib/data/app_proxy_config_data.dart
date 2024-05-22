@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 class AppProxyConfigData {
-
   // 定义一个路径变量
   final String _configName;
 
@@ -13,7 +12,7 @@ class AppProxyConfigData {
   File? _configFile;
 
   // 创建一个构造方法 带一个路径参数
-  AppProxyConfigData( this._configName){
+  AppProxyConfigData(this._configName) {
     if (kDebugMode) {
       print("AppData:$_configName");
     }
@@ -32,13 +31,13 @@ class AppProxyConfigData {
 
   Future<bool> saveAppConfig(Map<String, bool> data) async {
     final file = await _localFile;
-    try{
+    try {
       // 将数据转换为json字符串
       String jsonString = jsonEncode(data);
       // 将json字符串写入文件
       file.writeAsStringSync(jsonString);
       return true;
-    }catch(e){
+    } catch (e) {
       if (kDebugMode) {
         print("saveAppConfig:$e");
       }
@@ -46,8 +45,8 @@ class AppProxyConfigData {
     }
   }
 
-  Future<Map<String, bool>> readAppConfig() async{
-    try{
+  Future<Map<String, bool>> readAppConfig() async {
+    try {
       final file = await _localFile;
       // 读取文件内容
       String jsonString = file.readAsStringSync();
@@ -59,14 +58,11 @@ class AppProxyConfigData {
         print("iyue-> $data");
       }
       return data;
-    }catch(e){
+    } catch (e) {
       if (kDebugMode) {
         print("readAppConfig:$e");
       }
       return {};
     }
   }
-
-
-
 }

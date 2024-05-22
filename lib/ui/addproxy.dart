@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
   const AddProxyWidget({super.key, required this.onDataFetched});
+
   // 定义一个回调，用于处理读取到的数据
   final Function(Map<String, dynamic>) onDataFetched;
+
   @override
   State<AddProxyWidget> createState() => _AddProxyWidgetState();
 }
@@ -37,7 +39,6 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
         appBar: AppBar(
           title: const Text("添加代理"),
@@ -99,10 +100,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                     ),
                     onChanged: (value) {
                       // 校验只能输入ip地址
-                      if (value.isNotEmpty &&
-                          !RegExp(r'^[0-9.]+$').hasMatch(value)) {
-                        _controller_proxyHost.text =
-                            value.substring(0, value.length - 1);
+                      if (value.isNotEmpty && !RegExp(r'^[0-9.]+$').hasMatch(value)) {
+                        _controller_proxyHost.text = value.substring(0, value.length - 1);
                       }
                     },
                   ),
@@ -115,10 +114,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                     ),
                     onChanged: (value) {
                       // 校验只能输入数字
-                      if (value.isNotEmpty &&
-                          !RegExp(r'^[0-9]+$').hasMatch(value)) {
-                        _controller_proxyPort.text =
-                            value.substring(0, value.length - 1);
+                      if (value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
+                        _controller_proxyPort.text = value.substring(0, value.length - 1);
                       }
                     },
                   ),
@@ -148,9 +145,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                   ),
                 ],
               ),
-            )
-        )
-    );
+            )));
   }
 }
 
@@ -207,8 +202,7 @@ class _ProxyTypeState extends State<ProxyType> {
         });
       },
       // 生成下拉菜单项的列表
-      dropdownMenuEntries:
-          proxyItem.values.map<DropdownMenuEntry<proxyItem>>((proxyItem item) {
+      dropdownMenuEntries: proxyItem.values.map<DropdownMenuEntry<proxyItem>>((proxyItem item) {
         // 为每个proxyItem生成一个DropdownMenuEntry
         return DropdownMenuEntry<proxyItem>(
           value: item, // 设置菜单项的值

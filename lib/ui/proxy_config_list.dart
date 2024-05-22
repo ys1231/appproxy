@@ -17,14 +17,19 @@ class ProxyListHome extends StatefulWidget {
 class _ProxyListHomeState extends State<ProxyListHome> {
   // 配置文件操作类
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
+
   // 配置文件数据
   List<Map<String, dynamic>> _dataLists = [];
+
   // 控制只初始化读取一次配置文件
   bool _iscalled = false;
+
   // 当前选中代理名称
   String _isSelectedProxyName = "";
+
   // 方法调用通道
   static const platform = MethodChannel("cn.ys1231/appproxy/vpn");
+
   // 当前需要启动的代理配置
   Map<String, dynamic> _currentData = {};
 
@@ -92,8 +97,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   Future<void> _showDeleteDialog(BuildContext context, Map<String, dynamic> data) async {
     bool isDelete = await showDialog(
         context: context,
-        builder: (BuildContext context){
-          return  AlertDialog(
+        builder: (BuildContext context) {
+          return AlertDialog(
             title: const Text("提示"),
             content: const Text("是否删除该代理配置？"),
             actions: [
@@ -111,9 +116,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
               ),
             ],
           );
-        }
-    );
-    if (isDelete){
+        });
+    if (isDelete) {
       deletetoProxyConfig(data);
     }
   }
@@ -158,13 +162,13 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         if (kDebugMode) {
           print("---- ProxyListHome stopVpn fail");
         }
-     }
-   } on PlatformException catch (e) {
+      }
+    } on PlatformException catch (e) {
       if (kDebugMode) {
         print("Failed to stop proxy: '${e.message}'.");
       }
     }
- }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,8 +195,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
               child: SwitchListTile(
                 value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
                 title: Text('${c_data["proxyName"]}'),
-                subtitle: Text(
-                    '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+                subtitle:
+                    Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
                 onChanged: (bool value) {
                   setState(() {
                     if (value) {
@@ -209,7 +213,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                   });
                 },
               ),
-              onLongPress: (){
+              onLongPress: () {
                 if (kDebugMode) {
                   print("long press delete:${c_data["proxyName"]}");
                 }

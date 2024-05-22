@@ -53,7 +53,8 @@ class _iyueMainPageState extends State<iyueMainPage> {
 
   // 创建globalkey 方便调用子控件方法
   final GlobalKey<AppConfigState> _appConfigKey = GlobalKey<AppConfigState>();
-  final GlobalKey<AppConfigListOptionCheckboxState> _appOptionKey = GlobalKey<AppConfigListOptionCheckboxState>();
+  final GlobalKey<AppConfigListOptionCheckboxState> _appOptionKey =
+      GlobalKey<AppConfigListOptionCheckboxState>();
   late List<Widget> _children;
 
   // 2. 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
@@ -85,14 +86,14 @@ class _iyueMainPageState extends State<iyueMainPage> {
     _selectAll = false;
   }
 
-  void _onChangedShowSystemApp(bool? value){
+  void _onChangedShowSystemApp(bool? value) {
     _appConfigKey.currentState?.updateShowSystemApp(value);
     _showSystemAppSelected = value!;
     _appOptionKey.currentState?.updateSelect(false);
     _selectAll = false;
   }
 
-  void _onChangedSelectAll(bool? value){
+  void _onChangedSelectAll(bool? value) {
     _appConfigKey.currentState?.updateSelectAll(value);
     _selectAll = value!;
   }
@@ -112,27 +113,37 @@ class _iyueMainPageState extends State<iyueMainPage> {
                     itemBuilder: (BuildContext context) {
                       return [
                         PopupMenuItem<String>(
-                            value: 'showUserApp', child: Row(
+                            value: 'showUserApp',
+                            child: Row(
                               children: [
                                 const Text('显示用户应用'),
                                 const Spacer(),
-                                AppConfigListOptionCheckbox(isSelected: _showUserAppisSelected, onChanged: _onChangedShowUserApp)
+                                AppConfigListOptionCheckbox(
+                                    isSelected: _showUserAppisSelected,
+                                    onChanged: _onChangedShowUserApp)
                               ],
                             )),
                         PopupMenuItem<String>(
-                            value: 'showSystemApp', child: Row(
+                            value: 'showSystemApp',
+                            child: Row(
                               children: [
                                 const Text('显示系统应用'),
                                 const Spacer(),
-                                AppConfigListOptionCheckbox(isSelected: _showSystemAppSelected, onChanged: _onChangedShowSystemApp)
+                                AppConfigListOptionCheckbox(
+                                    isSelected: _showSystemAppSelected,
+                                    onChanged: _onChangedShowSystemApp)
                               ],
                             )),
                         PopupMenuItem<String>(
-                            value: 'selectAll', child: Row(
+                            value: 'selectAll',
+                            child: Row(
                               children: [
                                 const Text('全选'),
                                 const Spacer(),
-                                AppConfigListOptionCheckbox(key:_appOptionKey,isSelected: _selectAll, onChanged: _onChangedSelectAll)
+                                AppConfigListOptionCheckbox(
+                                    key: _appOptionKey,
+                                    isSelected: _selectAll,
+                                    onChanged: _onChangedSelectAll)
                               ],
                             )),
                       ];
@@ -174,8 +185,9 @@ class _iyueMainPageState extends State<iyueMainPage> {
   }
 }
 
-class AppConfigListOptionCheckbox extends StatefulWidget{
+class AppConfigListOptionCheckbox extends StatefulWidget {
   AppConfigListOptionCheckbox({super.key, required this.isSelected, required this.onChanged});
+
   final Function(bool? value) onChanged;
   bool? isSelected;
 
@@ -183,10 +195,9 @@ class AppConfigListOptionCheckbox extends StatefulWidget{
   State<AppConfigListOptionCheckbox> createState() => AppConfigListOptionCheckboxState();
 }
 
-class AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox>{
-
-  void updateSelect(bool? value){
-    setState((){
+class AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox> {
+  void updateSelect(bool? value) {
+    setState(() {
       widget.isSelected = value;
     });
   }
@@ -195,14 +206,12 @@ class AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox
   Widget build(BuildContext context) {
     return Checkbox(
         value: widget.isSelected,
-        onChanged: (bool? value)=>{
-          // 把ui刷新控制在内部
-          setState((){
-            widget.onChanged(value);
-            widget.isSelected = value;
-          })
-
-        }
-    );
-    }
+        onChanged: (bool? value) => {
+              // 把ui刷新控制在内部
+              setState(() {
+                widget.onChanged(value);
+                widget.isSelected = value;
+              })
+            });
+  }
 }
