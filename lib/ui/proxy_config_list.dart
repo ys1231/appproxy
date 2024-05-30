@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../data/proxy_config_data.dart';
+import 'package:flutter/services.dart';
+import 'package:appproxy/data/proxy_config_data.dart';
 import 'addproxy.dart';
+import 'package:appproxy/events/app_events.dart';
 
 class ProxyListHome extends StatefulWidget {
   const ProxyListHome({super.key});
@@ -11,10 +15,23 @@ class ProxyListHome extends StatefulWidget {
 }
 
 class _ProxyListHomeState extends State<ProxyListHome> {
+  // 配置文件操作类
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
 
+  // 配置文件数据
   List<Map<String, dynamic>> _dataLists = [];
+
+  // 控制只初始化读取一次配置文件
   bool _iscalled = false;
+
+  // 当前选中代理名称
+  String _isSelectedProxyName = "";
+
+  // 方法调用通道
+  static const platform = MethodChannel("cn.ys1231/appproxy/vpn");
+
+  // 当前需要启动的代理配置
+  Map<String, dynamic> _currentData = {};
 
   @override
   void initState() {
@@ -34,6 +51,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     _iscalled = true;
     try {
+      // 初始化历史代理配置
       _proxyConfigData.readProxyConfig().then((value) {
         setState(() {
           _dataLists.clear();
@@ -45,25 +63,125 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         print("---- ProxyListHome initProxyConfig error $e");
       }
     }
-
-    return;
   }
 
-  void handleConfigData(Map<String, dynamic> data) {
-    // 在这里处理从 AddProxyButton 返回的数据
-    if (_dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
+  // 在这里处理从 AddProxyButton 返回的数据 添加代理配置到列表
+  void handleConfigData(Map<String, dynamic> data, {bool isAdd = false}) {
+    if (!isAdd && _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
       if (kDebugMode) {
         print("handleConfigData Data already exists in the list, skipping.");
       }
       return;
     }
-    _dataLists.add(data);
+    if (isAdd) {
+      for (var item in _dataLists) {
+        if (item['proxyName'] == data['proxyName']) {
+          item['proxyName'] = data['proxyName'];
+          item['proxyType'] = data['proxyType'];
+          item['proxyHost'] = data['proxyHost'];
+          item['proxyPort'] = data['proxyPort'];
+          item['proxyUser'] = data['proxyUser'];
+          item['proxyPass'] = data['proxyPass'];
+          break;
+        }
+      }
+    } else {
+      _dataLists.add(data);
+    }
     _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
     setState(() {
       if (kDebugMode) {
         print('Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
       }
     });
+  }
+
+  // 删除列表中的代理配置
+  void deletetoProxyConfig(Map<String, dynamic> data) {
+    _dataLists.removeWhere((item) => item['proxyName'] == data['proxyName']);
+    _proxyConfigData.deleteProxyConfig(_dataLists);
+    setState(() {
+      if (kDebugMode) {
+        print('delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      }
+    });
+  }
+
+  // 显示提示是否删除代理
+  Future<void> _showDeleteDialog(BuildContext context, Map<String, dynamic> data) async {
+    bool isDelete = await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text("提示"),
+            content: const Text("是否删除该代理配置？"),
+            actions: [
+              TextButton(
+                child: const Text("取消"),
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: const Text("确定"),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+              ),
+            ],
+          );
+        });
+    if (isDelete) {
+      deletetoProxyConfig(data);
+    }
+  }
+
+  // 启动VPN
+  void _startProxy() async {
+    if (kDebugMode) {
+      print("---- ProxyListHome startVpn call: $_currentData");
+    }
+    _currentData['appProxyPackageList'] = appProxyPackageList.getList();
+    try {
+      bool result = await platform.invokeMethod('startVpn', _currentData);
+      if (result) {
+        if (kDebugMode) {
+          print("---- ProxyListHome startVpn: $_currentData success");
+        }
+      } else {
+        if (kDebugMode) {
+          print("---- ProxyListHome startVpn: $_currentData fail");
+        }
+        _isSelectedProxyName = "";
+      }
+    } on PlatformException catch (e) {
+      if (kDebugMode) {
+        print("Failed to start proxy: '${e.message}'.");
+      }
+    }
+  }
+
+  // 关闭VPN
+  void _stopProxy() async {
+    if (kDebugMode) {
+      print("---- ProxyListHome stopVpn call");
+    }
+    try {
+      bool result = await platform.invokeMethod('stopVpn');
+      if (result) {
+        if (kDebugMode) {
+          print("---- ProxyListHome stopVpn success");
+        }
+      } else {
+        if (kDebugMode) {
+          print("---- ProxyListHome stopVpn fail");
+        }
+      }
+    } on PlatformException catch (e) {
+      if (kDebugMode) {
+        print("Failed to stop proxy: '${e.message}'.");
+      }
+    }
   }
 
   @override
@@ -84,34 +202,48 @@ class _ProxyListHomeState extends State<ProxyListHome> {
           return const SizedBox.shrink();
         },
         itemBuilder: (BuildContext context, int c_index) {
-          if (kDebugMode) {
-            print("---- ProxyListHome c_index: $c_index ");
-          }
           Map<String, dynamic> c_data = _dataLists[c_index];
           return Card(
+            // 设置 margin 为水平方向 8.0，垂直方向 4.0
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: ListTile(
-              title: Text('${c_data["proxyName"]}'),
-              subtitle: Text(
-                  '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () {
+            child: GestureDetector(
+                child: SwitchListTile(
+                  // 设置选中状态
+                  value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
+                  // 设置标题和副标题
+                  title: Text('${c_data["proxyName"]}'),
+                  subtitle:
+                      Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+                  // 设置switch的onChanged事件
+                  onChanged: (bool value) {
+                    setState(() {
+                      if (value) {
+                        _isSelectedProxyName = c_data["proxyName"];
+                        _currentData = c_data;
+                        _startProxy();
+                      } else {
+                        _stopProxy();
+                        _isSelectedProxyName = "";
+                      }
+                      if (kDebugMode) {
+                        print("current index:$c_index select: $_isSelectedProxyName");
+                      }
+                    });
+                  },
+                ),
+                // 设置长按事件 主要触发删除操作
+                onLongPress: () {
                   if (kDebugMode) {
-                    print("delete item:$c_data");
+                    print("long press delete:${c_data["proxyName"]}");
                   }
-                  setState(() {
-                    _dataLists.remove(c_data);
-                    _proxyConfigData.deleteProxyConfig(_dataLists);
-                  });
+                  _showDeleteDialog(context, c_data);
                 },
-              ),
-              onTap: () {
-                if (kDebugMode) {
-                  print("---- ProxyListHome onTap ${c_data}");
-                }
-              },
-            ),
+                // 设置双击事件
+                onDoubleTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
+                    return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
+                  }));
+                }),
           );
         },
       ),
@@ -126,7 +258,7 @@ class AddProxyButton extends StatelessWidget {
   const AddProxyButton({super.key, required this.onDataFetched});
 
   // 定义一个回调，用于处理读取到的数据
-  final Function(Map<String, dynamic>) onDataFetched;
+  final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
 
   @override
   Widget build(BuildContext context) {
@@ -138,9 +270,8 @@ class AddProxyButton extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) => AddProxyWidget(
-                      onDataFetched: onDataFetched,
-                    )),
+                builder: (context) =>
+                    AddProxyWidget(onDataFetched: onDataFetched, onData: const {})),
           );
         },
         child: Container(

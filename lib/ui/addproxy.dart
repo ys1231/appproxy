@@ -2,9 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
-  const AddProxyWidget({super.key, required this.onDataFetched});
+  AddProxyWidget({super.key, required this.onDataFetched, required this.onData});
+
   // 定义一个回调，用于处理读取到的数据
-  final Function(Map<String, dynamic>) onDataFetched;
+  final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
+  Map<String, dynamic> onData = {};
+
   @override
   State<AddProxyWidget> createState() => _AddProxyWidgetState();
 }
@@ -36,8 +39,21 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
   final TextEditingController _controller_proxyPass = TextEditingController();
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
 
+    if (widget.onData.isNotEmpty) {
+      _controller_proxyName.text = widget.onData['proxyName'];
+      _controller_proxyType.text = widget.onData['proxyType'];
+      _controller_proxyHost.text = widget.onData['proxyHost'];
+      _controller_proxyPort.text = widget.onData['proxyPort'];
+      _controller_proxyUser.text = widget.onData['proxyUser'];
+      _controller_proxyPass.text = widget.onData['proxyPass'];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
           title: const Text("添加代理"),
@@ -56,14 +72,19 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                   if (kDebugMode) {
                     print("proxyConfig:$proxyConfig");
                   }
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(const SnackBar(content: Text('参数请填写完整!')));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: const Text('参数请填写完整!'),
+                      backgroundColor: Colors.purple.withOpacity(0.4)));
                   return;
                 }
                 // 这俩可以为空
                 proxyConfig['proxyUser'] = _controller_proxyUser.text;
                 proxyConfig['proxyPass'] = _controller_proxyPass.text;
-                widget.onDataFetched(proxyConfig);
+                if (widget.onData.isNotEmpty) {
+                  widget.onDataFetched(proxyConfig, isAdd: true);
+                } else {
+                  widget.onDataFetched(proxyConfig);
+                }
                 Navigator.pop(context);
               },
             )
@@ -80,12 +101,19 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextField(
-                    controller: _controller_proxyName,
-                    decoration: const InputDecoration(
-                      labelText: '配置名称',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
+                      readOnly: widget.onData.isNotEmpty,
+                      controller: _controller_proxyName,
+                      decoration: const InputDecoration(
+                        labelText: '配置名称',
+                        border: OutlineInputBorder(),
+                      ),
+                      onTap: () {
+                        if (widget.onData.isNotEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: const Text('配置名称不可修改!'),
+                              backgroundColor: Colors.purple.withOpacity(0.4)));
+                        }
+                      }),
                   const SizedBox(height: 20.0),
                   ProxyType(
                     controller: _controller_proxyType,
@@ -99,10 +127,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                     ),
                     onChanged: (value) {
                       // 校验只能输入ip地址
-                      if (value.isNotEmpty &&
-                          !RegExp(r'^[0-9.]+$').hasMatch(value)) {
-                        _controller_proxyHost.text =
-                            value.substring(0, value.length - 1);
+                      if (value.isNotEmpty && !RegExp(r'^[0-9.]+$').hasMatch(value)) {
+                        _controller_proxyHost.text = value.substring(0, value.length - 1);
                       }
                     },
                   ),
@@ -115,10 +141,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                     ),
                     onChanged: (value) {
                       // 校验只能输入数字
-                      if (value.isNotEmpty &&
-                          !RegExp(r'^[0-9]+$').hasMatch(value)) {
-                        _controller_proxyPort.text =
-                            value.substring(0, value.length - 1);
+                      if (value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
+                        _controller_proxyPort.text = value.substring(0, value.length - 1);
                       }
                     },
                   ),
@@ -148,9 +172,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                   ),
                 ],
               ),
-            )
-        )
-    );
+            )));
   }
 }
 
@@ -207,8 +229,7 @@ class _ProxyTypeState extends State<ProxyType> {
         });
       },
       // 生成下拉菜单项的列表
-      dropdownMenuEntries:
-          proxyItem.values.map<DropdownMenuEntry<proxyItem>>((proxyItem item) {
+      dropdownMenuEntries: proxyItem.values.map<DropdownMenuEntry<proxyItem>>((proxyItem item) {
         // 为每个proxyItem生成一个DropdownMenuEntry
         return DropdownMenuEntry<proxyItem>(
           value: item, // 设置菜单项的值
