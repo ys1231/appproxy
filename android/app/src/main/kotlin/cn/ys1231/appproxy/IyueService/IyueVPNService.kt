@@ -4,9 +4,9 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import com.google.gson.Gson
 import engine.Engine
 import engine.Key
-import java.io.FileDescriptor
 import java.util.concurrent.CountDownLatch
 
 
@@ -59,7 +59,8 @@ class IyueVPNService : VpnService() {
             .setMtu(1500)
 //            .addDnsServer("192.168.10.1")
             .setSession(applicationContext.packageName)
-        for (appPackageName in data["appProxyPackageList"] as List<String>) {
+        val allowedApps = jsonToList(data["appProxyPackageList"].toString())
+        for (appPackageName in allowedApps) {
             try {
                 Log.d(TAG, "addAllowedApplication: $appPackageName")
                 builder.addAllowedApplication(appPackageName)
@@ -67,8 +68,8 @@ class IyueVPNService : VpnService() {
                 Log.e(TAG, "addAllowedApplication: ${e.message}")
             }
         }
-        try {
 
+        try {
             vpnInterface = builder.establish()
             if (vpnInterface == null) {
                 Log.e(TAG, "vpnInterface: create establish error ")
@@ -86,7 +87,8 @@ class IyueVPNService : VpnService() {
             key.device = "fd://" + vpnInterface!!.fd // <--- here
             key.setInterface("")
             key.logLevel = "debug"
-            key.proxy = "${proxyType}://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}" // <--- and here
+            key.proxy =
+                "${proxyType}://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}" // <--- and here
             key.restAPI = ""
             key.tcpSendBufferSize = ""
             key.tcpReceiveBufferSize = ""
@@ -101,13 +103,8 @@ class IyueVPNService : VpnService() {
             if (vpnInterface != null) {
                 // 不能主动停止,会触发重复关闭fd 导致app崩溃
 //                Engine.stop()
-                try {
-                    vpnInterface?.close()
-                    vpnInterface = null
-
-                }catch (e: Exception){
-                    Log.e(TAG, "stopEngine: close error ${e.message}")
-                }
+                vpnInterface?.close()
+                vpnInterface = null
             }
             Log.d(TAG, "stopEngine: success!")
         }
@@ -135,4 +132,8 @@ class IyueVPNService : VpnService() {
         Log.d(TAG, "onDestroy: ")
     }
 
+    fun jsonToList(jsonString: String): List<String> {
+        val gson = Gson()
+        return gson.fromJson(jsonString, Array<String>::class.java).toList()
+    }
 }

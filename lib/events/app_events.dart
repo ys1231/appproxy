@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:event_bus/event_bus.dart';
 import 'package:flutter/foundation.dart';
 
@@ -31,11 +33,11 @@ class AppProxyPackageList {
     _proxyPackageList.clear();
   }
 
-  List<String> getList() {
+  String getListString() {
     if (kDebugMode) {
       print("getList:${_proxyPackageList.toList()}");
     }
-    return _proxyPackageList.toList();
+    return jsonEncode(_proxyPackageList.toList());
   }
 }
 

@@ -141,7 +141,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     if (kDebugMode) {
       print("---- ProxyListHome startVpn call: $_currentData");
     }
-    _currentData['appProxyPackageList'] = appProxyPackageList.getList();
+    _currentData['appProxyPackageList'] = appProxyPackageList.getListString();
     try {
       bool result = await platform.invokeMethod('startVpn', _currentData);
       if (result) {
