@@ -6,7 +6,6 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import engine.Engine
 import engine.Key
-import okhttp3.internal.closeQuietly
 import java.util.concurrent.CountDownLatch
 
 

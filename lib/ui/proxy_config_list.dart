@@ -66,14 +66,28 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   // 在这里处理从 AddProxyButton 返回的数据 添加代理配置到列表
-  void handleConfigData(Map<String, dynamic> data) {
-    if (_dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
+  void handleConfigData(Map<String, dynamic> data, {bool isAdd = false}) {
+    if (!isAdd && _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
       if (kDebugMode) {
         print("handleConfigData Data already exists in the list, skipping.");
       }
       return;
     }
-    _dataLists.add(data);
+    if (isAdd) {
+      for (var item in _dataLists) {
+        if (item['proxyName'] == data['proxyName']) {
+          item['proxyName'] = data['proxyName'];
+          item['proxyType'] = data['proxyType'];
+          item['proxyHost'] = data['proxyHost'];
+          item['proxyPort'] = data['proxyPort'];
+          item['proxyUser'] = data['proxyUser'];
+          item['proxyPass'] = data['proxyPass'];
+          break;
+        }
+      }
+    } else {
+      _dataLists.add(data);
+    }
     _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
     setState(() {
       if (kDebugMode) {
@@ -190,36 +204,46 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         itemBuilder: (BuildContext context, int c_index) {
           Map<String, dynamic> c_data = _dataLists[c_index];
           return Card(
+            // 设置 margin 为水平方向 8.0，垂直方向 4.0
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: GestureDetector(
-              child: SwitchListTile(
-                value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
-                title: Text('${c_data["proxyName"]}'),
-                subtitle:
-                    Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
-                onChanged: (bool value) {
-                  setState(() {
-                    if (value) {
-                      _isSelectedProxyName = c_data["proxyName"];
-                      _currentData = c_data;
-                      _startProxy();
-                    } else {
-                      _stopProxy();
-                      _isSelectedProxyName = "";
-                    }
-                    if (kDebugMode) {
-                      print("current index:$c_index select: $_isSelectedProxyName");
-                    }
-                  });
+                child: SwitchListTile(
+                  // 设置选中状态
+                  value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
+                  // 设置标题和副标题
+                  title: Text('${c_data["proxyName"]}'),
+                  subtitle:
+                      Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+                  // 设置switch的onChanged事件
+                  onChanged: (bool value) {
+                    setState(() {
+                      if (value) {
+                        _isSelectedProxyName = c_data["proxyName"];
+                        _currentData = c_data;
+                        _startProxy();
+                      } else {
+                        _stopProxy();
+                        _isSelectedProxyName = "";
+                      }
+                      if (kDebugMode) {
+                        print("current index:$c_index select: $_isSelectedProxyName");
+                      }
+                    });
+                  },
+                ),
+                // 设置长按事件 主要触发删除操作
+                onLongPress: () {
+                  if (kDebugMode) {
+                    print("long press delete:${c_data["proxyName"]}");
+                  }
+                  _showDeleteDialog(context, c_data);
                 },
-              ),
-              onLongPress: () {
-                if (kDebugMode) {
-                  print("long press delete:${c_data["proxyName"]}");
-                }
-                _showDeleteDialog(context, c_data);
-              },
-            ),
+                // 设置双击事件
+                onDoubleTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
+                    return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
+                  }));
+                }),
           );
         },
       ),
@@ -234,7 +258,7 @@ class AddProxyButton extends StatelessWidget {
   const AddProxyButton({super.key, required this.onDataFetched});
 
   // 定义一个回调，用于处理读取到的数据
-  final Function(Map<String, dynamic>) onDataFetched;
+  final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
 
   @override
   Widget build(BuildContext context) {
@@ -246,9 +270,8 @@ class AddProxyButton extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) => AddProxyWidget(
-                      onDataFetched: onDataFetched,
-                    )),
+                builder: (context) =>
+                    AddProxyWidget(onDataFetched: onDataFetched, onData: const {})),
           );
         },
         child: Container(
