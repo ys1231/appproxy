@@ -6,6 +6,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import engine.Engine
 import engine.Key
+import java.io.FileDescriptor
 import java.util.concurrent.CountDownLatch
 
 
@@ -85,7 +86,7 @@ class IyueVPNService : VpnService() {
             key.device = "fd://" + vpnInterface!!.fd // <--- here
             key.setInterface("")
             key.logLevel = "debug"
-            key.proxy = "${proxyType}://${proxyHost}:${proxyPort}" // <--- and here
+            key.proxy = "${proxyType}://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}" // <--- and here
             key.restAPI = ""
             key.tcpSendBufferSize = ""
             key.tcpReceiveBufferSize = ""
@@ -98,9 +99,15 @@ class IyueVPNService : VpnService() {
             Log.e(TAG, "startEngine: error ${e.message}")
         } finally {
             if (vpnInterface != null) {
-                vpnInterface!!.close()
-                Engine.stop()
-                vpnInterface = null
+                // 不能主动停止,会触发重复关闭fd 导致app崩溃
+//                Engine.stop()
+                try {
+                    vpnInterface?.close()
+                    vpnInterface = null
+
+                }catch (e: Exception){
+                    Log.e(TAG, "stopEngine: close error ${e.message}")
+                }
             }
             Log.d(TAG, "stopEngine: success!")
         }
