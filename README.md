@@ -1,16 +1,11 @@
 # appproxy
 
-A new Flutter project.
+基于flutter和[tun2socks](https://github.com/xjasonlyu/tun2socks) 的app代理工具
 
-## Getting Started
+目前已知的代理工具在较新的Android版本上都不太好用了, 因此自己开发了一个简单的app代理工具, 目前支持http, socks5代理.
 
-This project is a starting point for a Flutter application.
+# 依赖项目
+- [tun2socks](https://github.com/xjasonlyu/tun2socks)
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# 免责声明
+- 本程序仅用于学习交流, 请勿用于非法用途.
