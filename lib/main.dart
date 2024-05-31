@@ -196,6 +196,7 @@ class AppConfigListOptionCheckbox extends StatefulWidget {
 }
 
 class AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox> {
+  // 更新appconfig 菜单项是否选中
   void updateSelect(bool? value) {
     setState(() {
       widget.isSelected = value;

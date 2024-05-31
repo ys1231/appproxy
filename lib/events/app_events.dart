@@ -38,5 +38,5 @@ class AppProxyPackageList {
     return _proxyPackageList.toList();
   }
 }
-
+// 保存已选择的app
 AppProxyPackageList appProxyPackageList = AppProxyPackageList();
