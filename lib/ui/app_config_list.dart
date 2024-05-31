@@ -19,6 +19,9 @@ class AppConfigState extends State<AppConfigList> {
   // 所有app列表
   List _jsonAppListInfo = [];
 
+  // 缓存列表
+  List _cachedAppListInfo = [];
+
   // 用户app列表
   List _userAppListInfo = [];
 
@@ -30,6 +33,15 @@ class AppConfigState extends State<AppConfigList> {
 
   // 默认不显示系统app
   bool _isShowSystemApp = false;
+
+  // 是否使用缓存数据
+  bool _useCached = false;
+
+  /**
+   * 静态常量平台通道定义
+   * 该方法不接受任何参数，也不返回任何值。
+   * 它主要用于定义与原生平台通信的方法通道名称。
+   */
   static const platform = MethodChannel('cn.ys1231/appproxy');
 
   // 当前选中的app列表
@@ -65,7 +77,7 @@ class AppConfigState extends State<AppConfigList> {
   void updateShowUserApp(isShowUserApp) {
     _isShowUserApp = isShowUserApp;
     setState(() {
-      getAppList(useCached: true);
+      getAppList();
       _selectedItemsMap.clear();
       if (kDebugMode) {
         print("updateShowUserApp:$isShowUserApp");
@@ -76,7 +88,7 @@ class AppConfigState extends State<AppConfigList> {
   void updateShowSystemApp(isShowSystemApp) {
     _isShowSystemApp = isShowSystemApp;
     setState(() {
-      getAppList(useCached: true);
+      getAppList();
       _selectedItemsMap.clear();
       if (kDebugMode) {
         print("updateShowSystemApp:$isShowSystemApp");
@@ -100,24 +112,25 @@ class AppConfigState extends State<AppConfigList> {
   }
 
   // 远程调用获取Android 应用列表
-  Future<bool> getAppList({useCached = false}) async {
+  Future<bool> getAppList() async {
     try {
       if (kDebugMode) {
         print("iyue-> getAppList");
       }
-      List tmp = [];
-      if (useCached) {
-        // 使用缓存数据
-        tmp = _jsonAppListInfo;
-      } else {
+      if (!_useCached || _cachedAppListInfo.isEmpty) {
+        // 清理缓存数据
+        _cachedAppListInfo.clear();
         // 远程调用获取应用列表
         final appList = await platform.invokeMethod('getAppList');
-        tmp = jsonDecode(appList);
+        _cachedAppListInfo = jsonDecode(appList);
+        // 获取之后使用缓存数据
+        _useCached = true;
       }
+
       _jsonAppListInfo.clear();
       _systemAppListInfo.clear();
       _userAppListInfo.clear();
-      for (Map<String, dynamic> appInfo in tmp) {
+      for (Map<String, dynamic> appInfo in _cachedAppListInfo) {
         if (appInfo["isSystemApp"]) {
           _systemAppListInfo.add(appInfo);
         } else {
@@ -195,6 +208,7 @@ class AppConfigState extends State<AppConfigList> {
                 return Future.delayed(const Duration(milliseconds: 500), () {
                   // 下拉刷新触发整个重新build
                   setState(() {
+                    _useCached = false;
                     if (kDebugMode) {
                       print("onRefresh");
                     }

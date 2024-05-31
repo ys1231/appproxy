@@ -8,9 +8,6 @@ class AppProxyConfigData {
   // 定义一个路径变量
   final String _configName;
 
-  // 定义一个文件对象
-  File? _configFile;
-
   // 创建一个构造方法 带一个路径参数
   AppProxyConfigData(this._configName) {
     if (kDebugMode) {
