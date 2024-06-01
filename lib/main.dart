@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:appproxy/ui/app_config_list.dart';
 
+import 'ui/settings.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -73,7 +75,7 @@ class _iyueMainPageState extends State<iyueMainPage> {
       // app配置列表
       AppConfigList(key: _appConfigKey),
       // 设置页面 TODO
-      const Text('Settings'), // 设置页Widget
+      const AppSettings(), // 设置页Widget
     ];
     _appBarTitles = ['ProxyConfig', 'AppConfigList', 'Settings'];
   }

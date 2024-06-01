@@ -219,6 +219,7 @@ class AppConfigState extends State<AppConfigList> {
               child: Scrollbar(
                 // 列表
                 child: ListView.separated(
+                  // 创建从边缘反弹的滚动物理效果。
                   physics: const BouncingScrollPhysics(),
                   // 返回一个零尺寸的SizedBox
                   separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
@@ -229,7 +230,7 @@ class AppConfigState extends State<AppConfigList> {
                     Map<String, dynamic> itemMap = _jsonAppListInfo[c_index];
                     // 返回一个卡片
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                      margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
                       key: ValueKey(c_index),
                       // 列表项内容
                       child: ListTile(

@@ -208,7 +208,7 @@ class _ProxyTypeState extends State<ProxyType> {
   Widget build(BuildContext context) {
     return DropdownMenu<proxyItem>(
       menuStyle: MenuStyle(
-        backgroundColor: MaterialStateProperty.all(Colors.purple[100]),
+        backgroundColor: WidgetStateProperty.all(Colors.purple[100]),
       ),
       // 设置DropdownMenu的宽度将与其父级的宽度相同
       expandedInsets: EdgeInsets.zero,
