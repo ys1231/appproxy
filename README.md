@@ -1,8 +1,7 @@
 # appproxy
 
-基于flutter和[tun2socks](https://github.com/xjasonlyu/tun2socks) 的app代理工具
-
-目前已知的代理工具在较新的Android版本上都不太好用了, 因此自己开发了一个简单的app代理工具, 目前支持http, socks5代理.
+基于flutter和[tun2socks](https://github.com/xjasonlyu/tun2socks)
+appproxy 是一个轻量级的VPN代理工具，支持HTTP, SOCKS5协议
 
 # 依赖项目
 - [tun2socks](https://github.com/xjasonlyu/tun2socks)
