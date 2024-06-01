@@ -14,7 +14,7 @@ class AddProxyWidget extends StatefulWidget {
 
 // 定义全局函数用于校验Map中所有字符串类型的值
 bool isNullOrEmpty(Map<String, String> map) {
-  if (map == null || map.isEmpty) {
+  if (map.isEmpty) {
     return true;
   }
   for (var key in map.keys) {

@@ -1,6 +1,5 @@
 import 'package:appproxy/ui/proxy_config_list.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:appproxy/ui/app_config_list.dart';
 
 import 'ui/settings.dart';
@@ -42,6 +41,15 @@ class MyApp extends StatelessWidget {
   }
 }
 
+enum AppOption {
+  // 全选
+  selectAll,
+  // 用户app
+  showUserApp,
+  // 系统app
+  showSystemApp,
+}
+
 class iyueMainPage extends StatefulWidget {
   const iyueMainPage({super.key});
 
@@ -53,18 +61,18 @@ class _iyueMainPageState extends State<iyueMainPage> {
   int _currentIndex = 0;
   late List<String> _appBarTitles;
 
-  // 创建globalkey 方便调用子控件方法
+  // 1. 创建globalkey 方便调用子控件方法
   final GlobalKey<AppConfigState> _appConfigKey = GlobalKey<AppConfigState>();
-  final GlobalKey<AppConfigListOptionCheckboxState> _appOptionKey =
-      GlobalKey<AppConfigListOptionCheckboxState>();
+
   late List<Widget> _children;
 
   // 2. 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
-  bool _showUserAppisSelected = true;
+
+  bool _showUserAppSelected = true;
   bool _showSystemAppSelected = false;
   bool _selectAll = false;
 
-  /// initState函数是在State对象被创建并插入到Widget树中时调用的。
+  // initState函数是在State对象被创建并插入到Widget树中时调用的。
   @override
   void initState() {
     super.initState(); // 调用父类的initState方法
@@ -81,23 +89,28 @@ class _iyueMainPageState extends State<iyueMainPage> {
   }
 
   // 调用子控件方法传递菜单项选择内容
-  void _onChangedShowUserApp(bool? value) {
-    _appConfigKey.currentState?.updateShowUserApp(value);
-    _showUserAppisSelected = value!;
-    _appOptionKey.currentState?.updateSelect(false);
+  void _onChangedShowUserApp() {
+    setState(() {
+      _showUserAppSelected = !_showUserAppSelected;
+    });
+    _appConfigKey.currentState?.updateShowUserApp(_showUserAppSelected);
     _selectAll = false;
   }
 
-  void _onChangedShowSystemApp(bool? value) {
-    _appConfigKey.currentState?.updateShowSystemApp(value);
-    _showSystemAppSelected = value!;
-    _appOptionKey.currentState?.updateSelect(false);
+  Future<void> _onChangedShowSystemApp() async {
+    setState(() {
+      _showSystemAppSelected = !_showSystemAppSelected;
+    });
+    _appConfigKey.currentState?.updateShowSystemApp(_showSystemAppSelected);
+    // 筛选数据时刷新全选按钮 状态
     _selectAll = false;
   }
 
-  void _onChangedSelectAll(bool? value) {
-    _appConfigKey.currentState?.updateSelectAll(value);
-    _selectAll = value!;
+  Future<void> _onChangedSelectAll() async {
+    setState(() {
+      _selectAll = !_selectAll;
+    });
+    _appConfigKey.currentState?.updateSelectAll(_selectAll);
   }
 
   @override
@@ -108,53 +121,39 @@ class _iyueMainPageState extends State<iyueMainPage> {
           title: Text(_appBarTitles[_currentIndex]),
           actions: _appBarTitles[_currentIndex] == "AppConfigList"
               ? <Widget>[
-                  PopupMenuButton<String>(
-                    // 设置弹出菜单的图标
-                    icon: const Icon(Icons.more_vert),
-                    // 定义菜单项
-                    itemBuilder: (BuildContext context) {
-                      return [
-                        PopupMenuItem<String>(
-                            value: 'showUserApp',
-                            child: Row(
-                              children: [
-                                const Text('显示用户应用'),
-                                const Spacer(),
-                                AppConfigListOptionCheckbox(
-                                    isSelected: _showUserAppisSelected,
-                                    onChanged: _onChangedShowUserApp)
-                              ],
-                            )),
-                        PopupMenuItem<String>(
-                            value: 'showSystemApp',
-                            child: Row(
-                              children: [
-                                const Text('显示系统应用'),
-                                const Spacer(),
-                                AppConfigListOptionCheckbox(
-                                    isSelected: _showSystemAppSelected,
-                                    onChanged: _onChangedShowSystemApp)
-                              ],
-                            )),
-                        PopupMenuItem<String>(
-                            value: 'selectAll',
-                            child: Row(
-                              children: [
-                                const Text('全选'),
-                                const Spacer(),
-                                AppConfigListOptionCheckbox(
-                                    key: _appOptionKey,
-                                    isSelected: _selectAll,
-                                    onChanged: _onChangedSelectAll)
-                              ],
-                            )),
-                      ];
-                    },
-                    // 当选择一个菜单项时触发的回调
-                    onSelected: (String value) {
-                      print('Selected option: $value');
-                    },
-                  )
+                  PopupMenuButton(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (AppOption value) {
+                        switch (value) {
+                          case AppOption.selectAll:
+                            _onChangedSelectAll();
+                            break;
+                          case AppOption.showUserApp:
+                            _onChangedShowUserApp();
+                            break;
+                          case AppOption.showSystemApp:
+                            _onChangedShowSystemApp();
+                            break;
+                        }
+                      },
+                      itemBuilder: (BuildContext context) {
+                        return [
+                          CheckedPopupMenuItem<AppOption>(
+                            checked: _selectAll,
+                            value: AppOption.selectAll,
+                            child: const Text('全选'),
+                          ),
+                          CheckedPopupMenuItem<AppOption>(
+                            checked: _showUserAppSelected,
+                            value: AppOption.showUserApp,
+                            child: const Text('显示用户应用'),
+                          ),
+                          CheckedPopupMenuItem<AppOption>(
+                              checked: _showSystemAppSelected,
+                              value: AppOption.showSystemApp,
+                              child: const Text('显示系统应用'))
+                        ];
+                      })
                 ]
               : []),
       body: IndexedStack(
@@ -184,37 +183,5 @@ class _iyueMainPageState extends State<iyueMainPage> {
         ],
       ),
     );
-  }
-}
-
-class AppConfigListOptionCheckbox extends StatefulWidget {
-  AppConfigListOptionCheckbox({super.key, required this.isSelected, required this.onChanged});
-
-  final Function(bool? value) onChanged;
-  bool? isSelected;
-
-  @override
-  State<AppConfigListOptionCheckbox> createState() => AppConfigListOptionCheckboxState();
-}
-
-class AppConfigListOptionCheckboxState extends State<AppConfigListOptionCheckbox> {
-  // 更新appconfig 菜单项是否选中
-  void updateSelect(bool? value) {
-    setState(() {
-      widget.isSelected = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Checkbox(
-        value: widget.isSelected,
-        onChanged: (bool? value) => {
-              // 把ui刷新控制在内部
-              setState(() {
-                widget.onChanged(value);
-                widget.isSelected = value;
-              })
-            });
   }
 }
