@@ -15,14 +15,42 @@ class AppConfigList extends StatefulWidget {
 
 class AppConfigState extends State<AppConfigList> {
   var _itemCount = 0;
+
+  // 所有app列表
   List _jsonAppListInfo = [];
+
+  // 缓存列表
+  List _cachedAppListInfo = [];
+
+  // 用户app列表
   List _userAppListInfo = [];
+
+  // 系统app列表
   List _systemAppListInfo = [];
+
+  // 默认显示用户安装的app
   bool _isShowUserApp = true;
+
+  // 默认不显示系统app
   bool _isShowSystemApp = false;
+
+  // 是否使用缓存数据
+  bool _useCached = false;
+
+  /**
+   * 静态常量平台通道定义
+   * 该方法不接受任何参数，也不返回任何值。
+   * 它主要用于定义与原生平台通信的方法通道名称。
+   */
   static const platform = MethodChannel('cn.ys1231/appproxy');
+
+  // 当前选中的app列表
   late final Map<String, bool> _selectedItemsMap;
+
+  // app列表配置文件
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
+
+  // 用于更新调用子控件列表项选择状态
   List<GlobalKey<CardCheckboxState>> _cardKeys = [];
 
   @override
@@ -89,13 +117,20 @@ class AppConfigState extends State<AppConfigList> {
       if (kDebugMode) {
         print("iyue-> getAppList");
       }
-      // 远程调用获取应用列表
-      final appList = await platform.invokeMethod('getAppList');
-      List tmp = jsonDecode(appList);
+      if (!_useCached || _cachedAppListInfo.isEmpty) {
+        // 清理缓存数据
+        _cachedAppListInfo.clear();
+        // 远程调用获取应用列表
+        final appList = await platform.invokeMethod('getAppList');
+        _cachedAppListInfo = jsonDecode(appList);
+        // 获取之后使用缓存数据
+        _useCached = true;
+      }
+
       _jsonAppListInfo.clear();
       _systemAppListInfo.clear();
       _userAppListInfo.clear();
-      for (Map<String, dynamic> appInfo in tmp) {
+      for (Map<String, dynamic> appInfo in _cachedAppListInfo) {
         if (appInfo["isSystemApp"]) {
           _systemAppListInfo.add(appInfo);
         } else {
@@ -170,8 +205,10 @@ class AppConfigState extends State<AppConfigList> {
             return RefreshIndicator(
               onRefresh: () {
                 // 当调用此函数时，会延迟1秒后执行[getAppList]函数
-                return Future.delayed(const Duration(seconds: 1), () {
+                return Future.delayed(const Duration(milliseconds: 500), () {
+                  // 下拉刷新触发整个重新build
                   setState(() {
+                    _useCached = false;
                     if (kDebugMode) {
                       print("onRefresh");
                     }
@@ -182,6 +219,7 @@ class AppConfigState extends State<AppConfigList> {
               child: Scrollbar(
                 // 列表
                 child: ListView.separated(
+                  // 创建从边缘反弹的滚动物理效果。
                   physics: const BouncingScrollPhysics(),
                   // 返回一个零尺寸的SizedBox
                   separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
@@ -189,10 +227,10 @@ class AppConfigState extends State<AppConfigList> {
                   itemCount: _itemCount,
                   // 列表项构建器
                   itemBuilder: (BuildContext context, int c_index) {
-                    Map<String, dynamic> listItem = _jsonAppListInfo[c_index];
+                    Map<String, dynamic> itemMap = _jsonAppListInfo[c_index];
                     // 返回一个卡片
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                      margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
                       key: ValueKey(c_index),
                       // 列表项内容
                       child: ListTile(
@@ -207,34 +245,37 @@ class AppConfigState extends State<AppConfigList> {
                             width: 38, // 设置宽度
                             height: 38, // 设置高度
                             child: Image.memory(
-                              base64Decode(listItem["iconBytes"]),
+                              base64Decode(itemMap["iconBytes"]),
                               fit: BoxFit.cover, // 保持图片的宽高比
                             ),
                           ),
                           // 标题
-                          title: Text(listItem["label"]),
+                          title: Text(itemMap["label"]),
                           // 副标题
-                          subtitle: Text(listItem["packageName"]),
+                          subtitle: Text(itemMap["packageName"]),
                           // 显示一个复选框
                           trailing: CardCheckbox(
                               key: _cardKeys[c_index],
-                              isSelected: _selectedItemsMap[listItem["packageName"]] ?? false,
+                              // 根据是否选中列表初始化状态
+                              isSelected: _selectedItemsMap[itemMap["packageName"]] ?? false,
                               // 子控件回调这个函数更新界面对应的数据
                               callbackOnChanged: (newValue) {
-                                _selectedItemsMap[listItem["packageName"]] = newValue;
+                                // 如果选中了，添加到代理列表
+                                _selectedItemsMap[itemMap["packageName"]] = newValue;
+                                // 并且更新本地数据
                                 _appfile.saveAppConfig(_selectedItemsMap);
                                 if (newValue) {
                                   // 添加到代理列表
-                                  appProxyPackageList.add(listItem["packageName"]);
+                                  appProxyPackageList.add(itemMap["packageName"]);
                                 } else {
-                                  appProxyPackageList.remove(listItem["packageName"]);
+                                  appProxyPackageList.remove(itemMap["packageName"]);
                                 }
                               }),
                           onTap: () {
                             // 调用子控件选择或取消选中 并回调 callbackOnChanged 更新数据
                             _cardKeys[c_index].currentState!.toggleCheckbox();
                             if (kDebugMode) {
-                              print("onTap:${listItem["packageName"]}");
+                              print("onTap:${itemMap["packageName"]}");
                             }
                           }),
                     );
@@ -262,7 +303,9 @@ class CardCheckboxState extends State<CardCheckbox> {
   // 外部调用刷新checkbox
   void toggleCheckbox() {
     setState(() {
+      // 触发刷新当前选中状态
       widget.isSelected = !widget.isSelected;
+      // 调用回调函数更新数据
       widget.callbackOnChanged(widget.isSelected);
     });
   }

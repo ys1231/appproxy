@@ -2,6 +2,7 @@ package cn.ys1231.appproxy.data
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo.FLAG_SYSTEM
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -27,7 +28,6 @@ class Utils(val context: Context) {
         val pm = mContext.packageManager
         //set MATCH_ALL to prevent any filtering of the results
         val resolveInfos = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
-
         var appInfoList = mutableListOf<MutableMap<String, Any>>()
         for (info in resolveInfos) {
             if (info.loadLabel(pm).toString() == "appproxy"){
@@ -36,7 +36,7 @@ class Utils(val context: Context) {
             var appInfoMap = mutableMapOf<String, Any>()
             appInfoMap["label"] = info.loadLabel(pm).toString()
             appInfoMap["packageName"] = info.activityInfo.packageName
-            if (info.activityInfo.applicationInfo.sourceDir.contains("/data")) {
+            if (info.activityInfo.applicationInfo.sourceDir.contains("/data/app/")|| (info.activityInfo.applicationInfo.flags and FLAG_SYSTEM)==0) {
                 appInfoMap["isSystemApp"] = false
             } else {
                 appInfoMap["isSystemApp"] = true
