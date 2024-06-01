@@ -58,8 +58,9 @@ class IyueVPNService : VpnService() {
             .addRoute("0.0.0.0", 0)
             .setMtu(1500)
 //            .addDnsServer("192.168.10.1")
-            .setSession(applicationContext.packageName)
+            .setSession(packageName)
         val allowedApps = jsonToList(data["appProxyPackageList"].toString())
+        builder.addDisallowedApplication(packageName)
         for (appPackageName in allowedApps) {
             try {
                 Log.d(TAG, "addAllowedApplication: $appPackageName")
