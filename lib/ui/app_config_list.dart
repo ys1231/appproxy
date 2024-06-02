@@ -107,12 +107,12 @@ class AppConfigState extends State<AppConfigList> {
           // 添加到代理列表
           appProxyPackageList.add(app["packageName"]);
         }
-        // 并且更新本地数据
-        _appfile.saveAppConfig(_selectedItemsMap);
-
       } else {
         _selectedItemsMap.clear();
+        appProxyPackageList.clear();
       }
+      // 并且更新本地数据
+      _appfile.saveAppConfig(_selectedItemsMap);
     });
   }
 
