@@ -40,6 +40,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
       print("---- ProxyListHome initState call ");
     }
     initProxyConfig();
+    // 获取当前VPN状态
+    _getCurrentProxy();
   }
 
   void initProxyConfig() {
@@ -138,9 +140,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   // 启动VPN
   void _startProxy() async {
-    if (kDebugMode) {
-      print("---- ProxyListHome startVpn call: $_currentData");
-    }
+
     _currentData['appProxyPackageList'] = appProxyPackageList.getListString();
     try {
       bool result = await platform.invokeMethod('startVpn', _currentData);
@@ -161,11 +161,25 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
   }
 
+  // 获取当前VPN状态
+  void _getCurrentProxy() async {
+    try {
+      String result = await platform.invokeMethod('getCurrentProxy');
+      if (result.isNotEmpty) {
+        if (kDebugMode) {
+          print("---- ProxyListHome getCurrentProxy :$result");
+        }
+        _isSelectedProxyName = result;
+      }
+    }catch(e ){
+      if (kDebugMode) {
+        print("---- ProxyListHome getCurrentProxy error $e");
+      }
+    }
+  }
+
   // 关闭VPN
   void _stopProxy() async {
-    if (kDebugMode) {
-      print("---- ProxyListHome stopVpn call");
-    }
     try {
       bool result = await platform.invokeMethod('stopVpn');
       if (result) {

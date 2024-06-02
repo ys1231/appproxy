@@ -5,16 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
-import android.os.PersistableBundle
 import android.util.Log
 import cn.ys1231.appproxy.IyueService.IyueVPNService
 import cn.ys1231.appproxy.data.Utils
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.BasicMessageChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.Serializable
-import java.util.Objects
+
 
 class MainActivity : FlutterActivity() {
     private val TAG = "iyue->${this.javaClass.simpleName}"
@@ -22,8 +20,19 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL_VPN = "cn.ys1231/appproxy/vpn"
     private var intentVPNService: Intent? = null
     private val ACTION_STOP_SERVICE = "cn.ys1231.appproxy.STOP_VPN_SERVICE"
+    private var proxyName: String = ""
 
-        override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+       if ( intent.getBooleanExtra("iyue_vpn_channel", false)){
+           val data = intent.getStringExtra("proxyData")
+           if (data != null) {
+               proxyName = data
+           }
+       }
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         intentVPNService = Intent(this, IyueVPNService::class.java)
         MethodChannel(
@@ -45,24 +54,38 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL_VPN
         ).setMethodCallHandler { call, result ->
-            if (call.method == "startVpn") {
-                try {
-                    val proxy: Map<String, Any>? = call.arguments<Map<String, Any>>()
-                    startVpn(this,proxy)
-                    result.success(true)
-                } catch (e: Exception) {
-                    result.error("-1", e.message, null)
+            when (call.method) {
+                "startVpn" -> {
+                    try {
+                        val proxy: Map<String, Any>? = call.arguments<Map<String, Any>>()
+                        startVpn(this, proxy)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("-1", e.message, null)
+                    }
                 }
-            }else if (call.method == "stopVpn") {
-                try {
-                    stopVpnService(this)
-                    result.success(true)
-                } catch (e: Exception) {
-                    result.error("-1", e.message, null)
+                "stopVpn" -> {
+                    try {
+                        stopVpnService(this)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("-1", e.message, null)
+                    }
+                }
+                "getCurrentProxy" -> {
+                    try {
+                        val data = isVpnRunning()
+                        result.success(data)
+                    } catch (e: Exception) {
+                        result.error("-1", e.message, null)
+                    }
                 }
             }
-
         }
+    }
+
+    private fun isVpnRunning(): String? {
+        return proxyName
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -81,7 +104,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private val VPN_REQUEST_CODE = 100
-    private fun startVpn(context: Context, proxy:Map<String,Any>?) {
+    private fun startVpn(context: Context, proxy: Map<String, Any>?) {
         Log.d(TAG, "startVpn: $proxy")
         // 传递数据
         intentVPNService?.putExtra("data", proxy as Serializable)
@@ -93,6 +116,7 @@ class MainActivity : FlutterActivity() {
             context.startService(intentVPNService)
         }
     }
+
     private fun stopVpnService(context: Context) {
         val intent = Intent(context, IyueVPNService::class.java)
         intent.setAction(ACTION_STOP_SERVICE)

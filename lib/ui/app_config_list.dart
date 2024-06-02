@@ -104,7 +104,12 @@ class AppConfigState extends State<AppConfigList> {
       if (isSelectAll) {
         for (var app in _jsonAppListInfo) {
           _selectedItemsMap[app["packageName"]] = true;
+          // 添加到代理列表
+          appProxyPackageList.add(app["packageName"]);
         }
+        // 并且更新本地数据
+        _appfile.saveAppConfig(_selectedItemsMap);
+
       } else {
         _selectedItemsMap.clear();
       }

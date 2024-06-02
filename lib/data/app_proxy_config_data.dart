@@ -51,9 +51,6 @@ class AppProxyConfigData {
       Map<String, dynamic> jsonMap = jsonDecode(jsonString);
       // 将Map对象转换为Map<String, bool>对象
       Map<String, bool> data = Map<String, bool>.from(jsonMap);
-      if (kDebugMode) {
-        print("iyue-> $data");
-      }
       return data;
     } catch (e) {
       if (kDebugMode) {
