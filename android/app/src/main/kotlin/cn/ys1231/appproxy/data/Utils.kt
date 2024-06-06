@@ -17,6 +17,7 @@ import com.google.gson.Gson
 
 class Utils(private val context: Context) {
     private val TAG = "iyue->${this.javaClass.simpleName} "
+    val sharedPreferences = context.getSharedPreferences("vpnconfig", Context.MODE_PRIVATE)
 
     init {
         Log.d(TAG, ": Utils init !")
@@ -96,4 +97,20 @@ class Utils(private val context: Context) {
         return bitmap
     }
 
+    public fun setVpnStatus(status: Boolean){
+        var edit = sharedPreferences.edit()
+        edit.putBoolean("vpnStatus", status)
+        edit.commit()
+    }
+    public fun getVpnStatus(): Boolean{
+        return sharedPreferences.getBoolean("vpnStatus", false)
+    }
+    public fun setProxyName(name: String){
+        var edit = sharedPreferences.edit()
+        edit.putString("proxyName", name)
+        edit.commit()
+    }
+    public fun getProxyName(): String{
+        return sharedPreferences.getString("proxyName", "") ?: ""
+    }
 }

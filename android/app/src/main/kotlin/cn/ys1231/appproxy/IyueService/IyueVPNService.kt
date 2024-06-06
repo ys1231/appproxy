@@ -15,6 +15,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import cn.ys1231.appproxy.MainActivity
 import cn.ys1231.appproxy.R
+import cn.ys1231.appproxy.data.Utils
 import com.google.gson.Gson
 import engine.Engine
 import engine.Key
@@ -26,6 +27,7 @@ class IyueVPNService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnThread: Thread? = null
     private var proxyData: Map<String, Any>? = null
+    private var utils: Utils? = null
 
     // 移除死循环，并添加一个停止信号处理逻辑
     private val stopSignal = CountDownLatch(1)
@@ -38,11 +40,12 @@ class IyueVPNService : VpnService() {
         super.onCreate()
         // 初始化操作
         Log.d(TAG, "onCreate: IyueVPNService ")
+        utils = Utils(this)
         // 创建通知渠道（Android Oreo 及以上版本）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "iyue_vpn_channel"
             val channelName = "Iyue VPN"
-            val importance = NotificationManager.IMPORTANCE_LOW
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
             val channel = NotificationChannel(channelId, channelName, importance).apply {
                 description = "Iyue VPN Service Channel"
                 lightColor = Color.BLUE
@@ -57,6 +60,8 @@ class IyueVPNService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
             stopVpn()
+            utils?.setVpnStatus(false)
+            utils?.setProxyName("")
 //            stopSelf()
             return START_NOT_STICKY
         }
@@ -65,6 +70,7 @@ class IyueVPNService : VpnService() {
         vpnThread = object : Thread() {
             override fun run() {
                 try {
+                    utils?.setVpnStatus(true)
                     startVpn(proxyData!!)
                 } catch (e: Exception) {
                     Log.e(TAG, "vpnThread: fail", e)
@@ -74,8 +80,8 @@ class IyueVPNService : VpnService() {
         vpnThread?.start()
         // 创建并显示前台服务通知
         val notificationIntent = Intent(this, MainActivity::class.java)
-            .putExtra("iyue_vpn_channel",true)
-            .putExtra("proxyData", proxyData!!["proxyName"]as String)
+            .putExtra("iyue_vpn_channel", true)
+            .putExtra("proxyData", proxyData!!["proxyName"] as String)
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -86,7 +92,7 @@ class IyueVPNService : VpnService() {
         val notification = NotificationCompat.Builder(this, "iyue_vpn_channel")
             .setContentTitle("${applicationInfo.loadLabel(packageManager)}: ${proxyData!!["proxyName"]}")
             .setContentText("${proxyData!!["proxyType"]}: ${proxyData!!["proxyHost"]}:${proxyData!!["proxyPort"]}")
-            .setSmallIcon(R.drawable.vpn_foreground)
+            .setSmallIcon(R.mipmap.vpn)
             .setContentIntent(pendingIntent)
             .build()
 
@@ -122,6 +128,7 @@ class IyueVPNService : VpnService() {
                 Log.e(TAG, "vpnInterface: create establish error ")
                 return
             }
+            val proxyName = data["proxyName"].toString()
             val proxyHost = data["proxyHost"].toString()
             val proxyPort = (data["proxyPort"] as String).toInt()
             val proxyType = data["proxyType"].toString()
@@ -143,6 +150,7 @@ class IyueVPNService : VpnService() {
             Engine.insert(key)
             Engine.start()
             Log.d(TAG, "startEngine: ${key.toString()}")
+            utils?.setProxyName(proxyName)
             stopSignal.await()
         } catch (e: Exception) {
             Log.e(TAG, "startEngine: error ${e.message}")
@@ -188,7 +196,7 @@ class IyueVPNService : VpnService() {
         return vpnInterface != null
     }
 
-    public fun getProxyData() : String? {
+    public fun getProxyData(): String? {
         return proxyData!!["proxyName"]?.toString()
     }
 
