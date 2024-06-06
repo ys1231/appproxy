@@ -143,7 +143,7 @@ void showUpdateDialog(BuildContext context, String version, String arch,
   // 获取版本信息
   String appproxyUpdateUrl = url != ""
       ? url
-      : "https://api.github.com/repos/ys1231/appproxy/releases/latestsss";
+      : "https://api.github.com/repos/ys1231/appproxy/releases/latest";
   // 使用dio获取版本信息
   String versionName = "0";
   String modifyContent = "";
