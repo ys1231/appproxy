@@ -1,5 +1,5 @@
 {
-  "VersionName": "v0.0.2",
-  "ModifyContent": "\r\n1、新增检测版本更新功能.\r\n2、申请通知权限适配高版本",
+  "VersionName": "v0.0.3",
+  "ModifyContent": "\r\n1、新增app搜索功能,New app search function added",
   "DownloadUrl":"https://ys1231.cn:82/modules/appproxy/"
 }
