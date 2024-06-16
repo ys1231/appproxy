@@ -1,5 +1,5 @@
 {
   "VersionName": "v0.0.3",
-  "ModifyContent": "\r\n1、新增app搜索功能,New app search function added",
+  "ModifyContent": "\r\n1、feat: :fire: 新增app搜索功能,New app search function added.\r\n2、fix(update): :bug: 修复没有默认下载管理器,导致下载app失败.Fix that there is no default download manager, resulting in the failure of downloading the app",
   "DownloadUrl":"https://ys1231.cn:82/modules/appproxy/"
 }
