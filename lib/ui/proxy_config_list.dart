@@ -174,7 +174,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint("---- ProxyListHome build call: $_dataLists");
+    // debugPrint("---- ProxyListHome build call: $_dataLists");
     return Scaffold(
       appBar: AppBar(
         title: const Text('ProxyConfig'),

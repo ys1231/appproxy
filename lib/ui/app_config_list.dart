@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:appproxy/data/app_proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
+import 'package:lpinyin/lpinyin.dart';
 
 class AppConfigList extends StatefulWidget {
   const AppConfigList({super.key});
@@ -37,6 +38,9 @@ class AppConfigState extends State<AppConfigList> {
   // 系统app列表
   List _systemAppListInfo = [];
 
+  // 搜索结果列表
+  List _searchAppListInfo = [];
+
   // 默认显示用户安装的app
   bool _isShowUserApp = true;
 
@@ -52,6 +56,13 @@ class AppConfigState extends State<AppConfigList> {
 
   // 是否全选
   bool _selectAll = false;
+
+  // 显示搜索框
+  bool _showSearch = false;
+
+  // 搜索框控制器
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
 
   /**
    * 静态常量平台通道定义
@@ -92,7 +103,7 @@ class AppConfigState extends State<AppConfigList> {
     _isShowUserApp = isShowUserApp;
     setState(() {
       getAppList();
-      _selectedItemsMap.clear();
+      // _selectedItemsMap.clear();
       debugPrint("updateShowUserApp:$isShowUserApp");
     });
   }
@@ -101,7 +112,7 @@ class AppConfigState extends State<AppConfigList> {
     _isShowSystemApp = isShowSystemApp;
     setState(() {
       getAppList();
-      _selectedItemsMap.clear();
+      // _selectedItemsMap.clear();
       debugPrint("updateShowSystemApp:$isShowSystemApp");
     });
   }
@@ -183,6 +194,35 @@ class AppConfigState extends State<AppConfigList> {
     }
   }
 
+  void _searchApp(String searchText) {
+    _searchAppListInfo.clear();
+
+    // 遍历当前显示的应用列表
+    if (searchText.isNotEmpty) {
+      _searchAppListInfo = _jsonAppListInfo.where((itemMap) {
+        String label =
+            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase();
+        return label.startsWith(searchText.toLowerCase()) ||
+            itemMap["label"].toLowerCase().startsWith(searchText.toLowerCase());
+      }).toList();
+    }
+    if (_searchAppListInfo.isNotEmpty) {
+      // _searchAppListInfo = _jsonAppListInfo;
+      debugPrint(
+          "searchApp:${_searchAppListInfo.length} , all: $_searchAppListInfo");
+    } else {
+      _searchAppListInfo = _jsonAppListInfo.toList();
+    }
+    setState(() {});
+  }
+
+  void exitSearch() {
+    setState(() {
+      debugPrint("exitSearch");
+      _showSearch = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     /**
@@ -194,6 +234,54 @@ class AppConfigState extends State<AppConfigList> {
           title: const Text('AppConfigList'),
           backgroundColor: Theme.of(context).primaryColor,
           actions: <Widget>[
+            AnimatedCrossFade(
+                crossFadeState: _showSearch
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                firstChild: IconButton(
+                    key: const ValueKey(1),
+                    autofocus: true,
+                    onPressed: () {
+                      debugPrint("click search");
+                      setState(() {
+                        _showSearch = !_showSearch;
+                        if (_showSearch) {
+                          _searchController.clear();
+                          _searchApp("");
+                          Future.delayed(const Duration(milliseconds: 100), () {
+                            FocusScope.of(context)
+                                .requestFocus(_searchFocusNode);
+                          });
+                        }
+                      });
+                    },
+                    icon: const Icon(Icons.search)),
+                secondChild: SizedBox(
+                  key: const ValueKey(2),
+                  width: 150,
+                  child: TextField(
+                    controller: _searchController,
+                    cursorColor: Colors.black54,
+                    autofocus: true,
+                    focusNode: _searchFocusNode,
+                    decoration: const InputDecoration(
+                        hintText: ' 搜索应用',
+                        // hintStyle: TextStyle(color: Colors.white),
+                        border: InputBorder.none),
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (value) {
+                      debugPrint("search: -------- onChanged ----- $value");
+                      _searchApp(value);
+                    },
+                    onTapOutside: (event) {
+                      debugPrint("search: -------- onTapOutside ----- $event");
+                      Future.delayed(const Duration(milliseconds: 100), () {
+                        exitSearch();
+                      });
+                    },
+                  ),
+                ),
+                duration: const Duration(microseconds: 10)),
             PopupMenuButton(
                 icon: const Icon(Icons.more_vert),
                 onSelected: (AppOption value) {
@@ -275,10 +363,13 @@ class AppConfigState extends State<AppConfigList> {
                     separatorBuilder: (BuildContext context, int index) =>
                         const SizedBox.shrink(),
                     // 列表项数量
-                    itemCount: _itemCount,
+                    itemCount:
+                        _showSearch ? _searchAppListInfo.length : _itemCount,
                     // 列表项构建器
                     itemBuilder: (BuildContext context, int c_index) {
-                      Map<String, dynamic> itemMap = _jsonAppListInfo[c_index];
+                      Map<String, dynamic> itemMap = _showSearch
+                          ? _searchAppListInfo[c_index]
+                          : _jsonAppListInfo[c_index];
                       // 返回一个卡片
                       return Card(
                         margin: const EdgeInsets.symmetric(
