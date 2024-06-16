@@ -172,7 +172,7 @@ class MainActivity : FlutterActivity() {
 
     private fun startDownload(url: String?) {
         val downloadIntent = Intent(Intent.ACTION_VIEW)
-        downloadIntent.setDataAndType(Uri.parse(url), "application/octet-stream")
+        downloadIntent.data = Uri.parse(url)
         downloadIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         startActivity(downloadIntent)
     }
