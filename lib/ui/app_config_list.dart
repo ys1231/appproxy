@@ -260,6 +260,7 @@ class AppConfigState extends State<AppConfigList> {
                   key: const ValueKey(2),
                   width: 150,
                   child: TextField(
+                    key: const ValueKey(3),
                     controller: _searchController,
                     cursorColor: Colors.black54,
                     autofocus: true,
@@ -273,11 +274,13 @@ class AppConfigState extends State<AppConfigList> {
                       debugPrint("search: -------- onChanged ----- $value");
                       _searchApp(value);
                     },
-                    onTapOutside: (event) {
-                      debugPrint("search: -------- onTapOutside ----- $event");
-                      Future.delayed(const Duration(milliseconds: 100), () {
-                        exitSearch();
-                      });
+                    onTapOutside: (PointerDownEvent event) {
+                      debugPrint("search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
+                      if (event.localPosition.dx>340){
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          exitSearch();
+                        });
+                      }
                     },
                   ),
                 ),
