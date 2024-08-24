@@ -231,7 +231,7 @@ class AppConfigState extends State<AppConfigList> {
      */
     return Scaffold(
       appBar: AppBar(
-          title: const Text('AppConfigList'),
+          title: const Text('APP 配置列表'),
           backgroundColor: Theme.of(context).primaryColor,
           actions: <Widget>[
             AnimatedCrossFade(

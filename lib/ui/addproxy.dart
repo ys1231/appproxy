@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -69,9 +71,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 proxyConfig['proxyHost'] = _controller_proxyHost.text;
                 proxyConfig['proxyPort'] = _controller_proxyPort.text;
                 if (isNullOrEmpty(proxyConfig)) {
-                  if (kDebugMode) {
-                    print("proxyConfig:$proxyConfig");
-                  }
+                  debugPrint("proxyConfig:$proxyConfig");
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: const Text('参数请填写完整!'),
                       backgroundColor: Colors.purple.withOpacity(0.4)));
@@ -130,6 +130,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                       if (value.isNotEmpty && !RegExp(r'^[0-9.]+$').hasMatch(value)) {
                         _controller_proxyHost.text = value.substring(0, value.length - 1);
                       }
+                      checkConnect(context);
                     },
                   ),
                   const SizedBox(height: 20.0),
@@ -144,6 +145,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                       if (value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
                         _controller_proxyPort.text = value.substring(0, value.length - 1);
                       }
+                      checkConnect(context);
                     },
                   ),
                   const SizedBox(height: 20.0),
@@ -174,6 +176,50 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
               ),
             )));
   }
+
+  void checkConnect(context) async {
+    final ip = _controller_proxyHost.text;
+    final port = _controller_proxyPort.text;
+    final proxyType = _controller_proxyType.text;
+    if (ip.isEmpty || port.isEmpty){
+      return ;
+    }
+    // 1. 判断代理类型 http 或者 socks5
+    if ("http"== proxyType) {
+      // http代理
+      try{
+        final response = await Dio().get('http://$ip:$port', options: Options(
+            sendTimeout: const Duration(seconds: 1),
+            receiveTimeout: const Duration(seconds: 1)
+        ));
+        debugPrint("connect status_code:${response.statusCode}");
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(
+            content: Text('connect success'),
+            backgroundColor: Colors.greenAccent)
+        );
+      }catch(e){
+        debugPrint(e.toString());
+      }
+    } else if ("socks5" == proxyType){
+      // socks5代理
+      try{
+        final socket = await Socket.connect(ip, int.parse(port), timeout: const Duration(seconds: 1));
+        socket.close();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(
+              content: Text('connect success'),
+              backgroundColor: Colors.greenAccent)
+        );
+      }catch(e){
+        debugPrint(e.toString());
+      }
+    }else{
+
+    }
+
+  }
+
 }
 
 class ProxyType extends StatefulWidget {

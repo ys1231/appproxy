@@ -177,7 +177,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     // debugPrint("---- ProxyListHome build call: $_dataLists");
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ProxyConfig'),
+        title: const Text('Server 配置列表'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: ListView.separated(

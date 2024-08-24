@@ -34,6 +34,7 @@ class MyApp extends StatelessWidget {
           error: Colors.transparent, // 可选：设置错误颜色为透明，避免产生额外的颜色
           // 其他颜色也可以根据需要设置为透明或自定义颜色
         ),
+        appBarTheme: const AppBarTheme(centerTitle: true)
       ),
       // 设置底部导航菜单作为应用的起始页面
       home: const iyueMainPage(),

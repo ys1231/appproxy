@@ -43,7 +43,7 @@ class _AppSettingsState extends State<AppSettings> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: const Text('设置'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: Column(
