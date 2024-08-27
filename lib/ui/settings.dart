@@ -26,7 +26,7 @@ class _AppSettingsState extends State<AppSettings> {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     // 获取是否需要检测更新
     _isCheckUpdate = await AppSetings.getCheckUpdate();
-    _version = 'v${packageInfo.version}';
+    _version = packageInfo.version;
     if (_isCheckUpdate) {
       showUpdateDialog(context, _version, _arch);
     }

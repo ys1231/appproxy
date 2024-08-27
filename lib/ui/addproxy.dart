@@ -1,6 +1,5 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:appproxy/events/debounce.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
@@ -40,6 +39,8 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
   final TextEditingController _controller_proxyUser = TextEditingController();
   final TextEditingController _controller_proxyPass = TextEditingController();
 
+  final Debounce _debounce = Debounce(const Duration(seconds: 1));
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +53,12 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
       _controller_proxyUser.text = widget.onData['proxyUser'];
       _controller_proxyPass.text = widget.onData['proxyPass'];
     }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _debounce.dispose();
   }
 
   @override
@@ -130,7 +137,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                       if (value.isNotEmpty && !RegExp(r'^[0-9.]+$').hasMatch(value)) {
                         _controller_proxyHost.text = value.substring(0, value.length - 1);
                       }
-                      checkConnect(context);
+                      _debounce.call(context,checkConnect);
                     },
                   ),
                   const SizedBox(height: 20.0),
@@ -145,7 +152,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                       if (value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
                         _controller_proxyPort.text = value.substring(0, value.length - 1);
                       }
-                      checkConnect(context);
+                      _debounce.call(context,checkConnect);
                     },
                   ),
                   const SizedBox(height: 20.0),
@@ -180,42 +187,21 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
   void checkConnect(context) async {
     final ip = _controller_proxyHost.text;
     final port = _controller_proxyPort.text;
-    final proxyType = _controller_proxyType.text;
+
     if (ip.isEmpty || port.isEmpty){
       return ;
     }
-    // 1. 判断代理类型 http 或者 socks5
-    if ("http"== proxyType) {
-      // http代理
-      try{
-        final response = await Dio().get('http://$ip:$port', options: Options(
-            sendTimeout: const Duration(seconds: 1),
-            receiveTimeout: const Duration(seconds: 1)
-        ));
-        debugPrint("connect status_code:${response.statusCode}");
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(
-            content: Text('connect success'),
-            backgroundColor: Colors.greenAccent)
-        );
-      }catch(e){
-        debugPrint(e.toString());
-      }
-    } else if ("socks5" == proxyType){
-      // socks5代理
-      try{
-        final socket = await Socket.connect(ip, int.parse(port), timeout: const Duration(seconds: 1));
-        socket.close();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(
-              content: Text('connect success'),
-              backgroundColor: Colors.greenAccent)
-        );
-      }catch(e){
-        debugPrint(e.toString());
-      }
-    }else{
-
+    debugPrint("checkConnect:$ip:$port");
+    try{
+      final socket = await Socket.connect(ip, int.parse(port), timeout: const Duration(seconds: 1));
+      socket.close();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(
+          content: Text('connect success'),
+          backgroundColor: Colors.greenAccent)
+      );
+    }catch(e){
+      debugPrint(e.toString());
     }
 
   }
@@ -241,7 +227,7 @@ enum proxyItem {
 }
 
 class _ProxyTypeState extends State<ProxyType> {
-  String defaultValue = 'http';
+  String defaultValue = 'socks5';
   proxyItem? selectedItem;
 
   void onChanged(String? newValue) {
@@ -259,7 +245,7 @@ class _ProxyTypeState extends State<ProxyType> {
       // 设置DropdownMenu的宽度将与其父级的宽度相同
       expandedInsets: EdgeInsets.zero,
       // 设置初始选中项为_http
-      initialSelection: proxyItem.http,
+      initialSelection: widget.controller.text == defaultValue ? proxyItem.socks5 : proxyItem.http,
       // 关联的控制器
       controller: widget.controller,
       // 点击时不自动获取焦点
