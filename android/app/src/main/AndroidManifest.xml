@@ -29,7 +29,6 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:process=":background"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="vpn" />
             <intent-filter>

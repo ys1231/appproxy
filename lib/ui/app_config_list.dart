@@ -1,10 +1,9 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:appproxy/data/app_proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lpinyin/lpinyin.dart';
 
 class AppConfigList extends StatefulWidget {
@@ -200,10 +199,10 @@ class AppConfigState extends State<AppConfigList> {
     // 遍历当前显示的应用列表
     if (searchText.isNotEmpty) {
       _searchAppListInfo = _jsonAppListInfo.where((itemMap) {
-        String label =
-            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase();
-        return label.startsWith(searchText.toLowerCase()) ||
-            itemMap["label"].toLowerCase().startsWith(searchText.toLowerCase());
+        final label =
+            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase()+ itemMap["packageName"];
+        final search = searchText.toLowerCase();
+        return label.startsWith(search) || label.startsWith(search)|| label.contains(search);
       }).toList();
     }
     if (_searchAppListInfo.isNotEmpty) {

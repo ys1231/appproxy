@@ -2,7 +2,6 @@ package cn.ys1231.appproxy.data
 
 import android.Manifest.permission.INTERNET
 import android.content.Context
-import android.content.Intent
 import android.content.pm.ApplicationInfo.FLAG_SYSTEM
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -12,15 +11,15 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.Drawable
 import android.util.Base64
 import android.util.Log
-import java.io.ByteArrayOutputStream
 import com.google.gson.Gson
+import java.io.ByteArrayOutputStream
 
 class Utils(private val context: Context) {
     private val TAG = "iyue->${this.javaClass.simpleName} "
-    val sharedPreferences = context.getSharedPreferences("vpnconfig", Context.MODE_PRIVATE)
+//    val sharedPreferences = context.getSharedPreferences("vpnconfig", Context.MODE_PRIVATE)
 
     init {
-        Log.d(TAG, ": Utils init !")
+        Log.d(TAG, "Utils init !")
     }
 
     /**
@@ -97,20 +96,20 @@ class Utils(private val context: Context) {
         return bitmap
     }
 
-    public fun setVpnStatus(status: Boolean){
-        var edit = sharedPreferences.edit()
-        edit.putBoolean("vpnStatus", status)
-        edit.commit()
-    }
-    public fun getVpnStatus(): Boolean{
-        return sharedPreferences.getBoolean("vpnStatus", false)
-    }
-    public fun setProxyName(name: String){
-        var edit = sharedPreferences.edit()
-        edit.putString("proxyName", name)
-        edit.commit()
-    }
-    public fun getProxyName(): String{
-        return sharedPreferences.getString("proxyName", "") ?: ""
-    }
+//    public fun setVpnStatus(status: Boolean){
+//        var edit = sharedPreferences.edit()
+//        edit.putBoolean("vpnStatus", status)
+//        edit.commit()
+//    }
+//    public fun getVpnStatus(): Boolean{
+//        return sharedPreferences.getBoolean("vpnStatus", false)
+//    }
+//    public fun setProxyName(name: String){
+//        var edit = sharedPreferences.edit()
+//        edit.putString("proxyName", name)
+//        edit.commit()
+//    }
+//    public fun getProxyName(): String{
+//        return sharedPreferences.getString("proxyName", "") ?: ""
+//    }
 }

@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
+import 'package:appproxy/data/proxy_config_data.dart';
+import 'package:appproxy/events/app_events.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:appproxy/data/proxy_config_data.dart';
+
 import 'addproxy.dart';
-import 'package:appproxy/events/app_events.dart';
 
 class ProxyListHome extends StatefulWidget {
   const ProxyListHome({super.key});
@@ -37,8 +38,6 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     super.initState();
     debugPrint("---- ProxyListHome initState call ");
     initProxyConfig();
-    // 获取当前VPN状态
-    _getCurrentProxy();
   }
 
   void initProxyConfig() {
@@ -142,19 +141,6 @@ class _ProxyListHomeState extends State<ProxyListHome> {
       }
     } on PlatformException catch (e) {
       debugPrint("Failed to start proxy: '${e.message}'.");
-    }
-  }
-
-  // 获取当前VPN状态
-  void _getCurrentProxy() async {
-    try {
-      String result = await platform.invokeMethod('getCurrentProxy');
-      if (result.isNotEmpty) {
-        debugPrint("---- ProxyListHome getCurrentProxy :$result");
-        _isSelectedProxyName = result;
-      }
-    } catch (e) {
-      debugPrint("---- ProxyListHome getCurrentProxy error $e");
     }
   }
 
