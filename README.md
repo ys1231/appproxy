@@ -35,6 +35,7 @@
 ```shell
 # 如果发现Android Studio 调试flutter 自动跳到一个只读的文件,调试的时候无法修改代码,可以恢复上一个版本,是的坑.
 # 推荐 Android Studio Iguana | 2023.2.1 Patch 2
+flutter build apk --release --split-per-abi --build-name=$VERSION --obfuscate --split-debug-info ./build/
 ```
 
 # 免责声明
