@@ -1,11 +1,13 @@
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/ui/app_update.dart';
-import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:version/version.dart';
+
+import '../generated/l10n.dart';
 
 class AppSettings extends StatefulWidget {
   const AppSettings({super.key});
@@ -43,7 +45,7 @@ class _AppSettingsState extends State<AppSettings> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('设置'),
+        title: Text(S.current.text_settings),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: Column(
@@ -51,8 +53,8 @@ class _AppSettingsState extends State<AppSettings> {
           Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.only(left: 10.0, top: 10.0),
-            child:
-                const Text('版本更新', style: TextStyle(color: Colors.lightBlue)),
+            child: Text(S.of(context).text_version_update,
+                style: const TextStyle(color: Colors.lightBlue)),
           ),
           GestureDetector(
             child: Card(
@@ -62,14 +64,15 @@ class _AppSettingsState extends State<AppSettings> {
                 height: 50.0,
                 child: Row(
                   children: [
-                    const Align(
+                    Align(
                         alignment: Alignment.centerLeft,
-                        child: Text('是否开启更新检测')),
+                        child: Text(S.of(context).text_is_open_check_update)),
                     const Spacer(),
                     Switch(
                         value: _isCheckUpdate,
                         onChanged: (bool newValue) {
-                          debugPrint('更新检测:$newValue');
+                          debugPrint(
+                              '${S.of(context).text_check_update}:$newValue');
                           setState(() {
                             _isCheckUpdate = newValue;
                             AppSetings.setCheckUpdate(newValue);
@@ -90,7 +93,8 @@ class _AppSettingsState extends State<AppSettings> {
           Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.only(left: 10.0, top: 10.0),
-            child: const Text('关于', style: TextStyle(color: Colors.lightBlue)),
+            child: Text(S.of(context).text_about,
+                style: const TextStyle(color: Colors.lightBlue)),
           ),
           const SizedBox(height: 10.0),
           GestureDetector(
@@ -99,7 +103,7 @@ class _AppSettingsState extends State<AppSettings> {
               padding: const EdgeInsets.only(left: 10.0),
               width: MediaQuery.of(context).size.width,
               height: 50.0,
-              child: const Center(child: Text('关于 appproxy')),
+              child: Center(child: Text('${S.current.text_about} appproxy')),
             )),
             onTap: () {
               // 显示当前app的信息
@@ -110,9 +114,9 @@ class _AppSettingsState extends State<AppSettings> {
                 applicationIcon: const Icon(Icons.app_registration),
                 applicationLegalese: 'Copyright © 2024 ...',
                 children: [
-                  const Text('appproxy 是一个轻量级的VPN代理工具，支持HTTP, SOCKS5协议'),
-                  const Text('作者：@iyue'),
-                  const Text('更新时间：2024-06-02'),
+                  Text(S.of(context).text_describe),
+                  Text(S.of(context).text_author),
+                  Text('${S.of(context).text_update_time}：2024-09-15'),
                   Row(
                     children: [
                       const Text('github:'),
@@ -178,13 +182,13 @@ void showUpdateDialog(BuildContext context, String version, String arch,
     if (retryCount < maxRetry) {
       retryCount++;
       appproxyUpdateUrl = "https://ys1231.cn:82/modules/appproxy/appproxy.json";
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('获取版本信息失败,使用国内更新渠道!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).text_get_version_info_fail)));
       showUpdateDialog(context, version, arch,
           url: appproxyUpdateUrl, retryCount: retryCount);
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('获取版本信息失败,请检查网络!')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(S.of(context).text_get_version_info_check_networ)));
       return;
     }
   }
@@ -195,9 +199,10 @@ void showUpdateDialog(BuildContext context, String version, String arch,
     if (versionName == "0") {
       return;
     }
-    debugPrint('当前是最新版本,current:$version,new:$versionName');
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('当前是最新版本')));
+    debugPrint(
+        '${S.of(context).text_current_latest},current:$version,new:$versionName');
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).text_current_latest)));
     return;
   }
   // 显示更新对话框

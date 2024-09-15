@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:appproxy/data/app_proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
+import 'package:appproxy/generated/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lpinyin/lpinyin.dart';
@@ -200,9 +201,12 @@ class AppConfigState extends State<AppConfigList> {
     if (searchText.isNotEmpty) {
       _searchAppListInfo = _jsonAppListInfo.where((itemMap) {
         final label =
-            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase()+ itemMap["packageName"];
+            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase() +
+                itemMap["packageName"];
         final search = searchText.toLowerCase();
-        return label.startsWith(search) || label.startsWith(search)|| label.contains(search);
+        return label.startsWith(search) ||
+            label.startsWith(search) ||
+            label.contains(search);
       }).toList();
     }
     if (_searchAppListInfo.isNotEmpty) {
@@ -230,7 +234,7 @@ class AppConfigState extends State<AppConfigList> {
      */
     return Scaffold(
       appBar: AppBar(
-          title: const Text('APP 配置列表'),
+          title: Text('APP ${S.of(context).text_app_config_list}'),
           backgroundColor: Theme.of(context).primaryColor,
           actions: <Widget>[
             AnimatedCrossFade(
@@ -264,8 +268,8 @@ class AppConfigState extends State<AppConfigList> {
                     cursorColor: Colors.black54,
                     autofocus: true,
                     focusNode: _searchFocusNode,
-                    decoration: const InputDecoration(
-                        hintText: ' 搜索应用',
+                    decoration: InputDecoration(
+                        hintText: S.of(context).text_search_app,
                         // hintStyle: TextStyle(color: Colors.white),
                         border: InputBorder.none),
                     style: const TextStyle(color: Colors.white),
@@ -274,8 +278,9 @@ class AppConfigState extends State<AppConfigList> {
                       _searchApp(value);
                     },
                     onTapOutside: (PointerDownEvent event) {
-                      debugPrint("search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
-                      if (event.localPosition.dx>340){
+                      debugPrint(
+                          "search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
+                      if (event.localPosition.dx > 340) {
                         Future.delayed(const Duration(milliseconds: 300), () {
                           exitSearch();
                         });
@@ -309,17 +314,17 @@ class AppConfigState extends State<AppConfigList> {
                     CheckedPopupMenuItem<AppOption>(
                       checked: _selectAll,
                       value: AppOption.selectAll,
-                      child: const Text('全选'),
+                      child: Text(S.of(context).text_select_all),
                     ),
                     CheckedPopupMenuItem<AppOption>(
                       checked: _showUserAppSelected,
                       value: AppOption.showUserApp,
-                      child: const Text('显示用户应用'),
+                      child: Text(S.of(context).text_show_user_app),
                     ),
                     CheckedPopupMenuItem<AppOption>(
                         checked: _showSystemAppSelected,
                         value: AppOption.showSystemApp,
-                        child: const Text('显示系统应用'))
+                        child: Text(S.of(context).text_show_system_app))
                   ];
                 })
           ]),

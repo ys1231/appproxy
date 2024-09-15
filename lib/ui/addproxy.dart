@@ -1,9 +1,12 @@
 import 'dart:io';
+
 import 'package:appproxy/events/debounce.dart';
+import 'package:appproxy/generated/l10n.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
-  AddProxyWidget({super.key, required this.onDataFetched, required this.onData});
+  AddProxyWidget(
+      {super.key, required this.onDataFetched, required this.onData});
 
   // 定义一个回调，用于处理读取到的数据
   final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
@@ -65,7 +68,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: const Text("添加代理"),
+          title: Text(S.of(context).text_add_proxy),
           // backgroundColor: const Color.fromRGBO(142, 0, 244, 1.0),
           backgroundColor: Theme.of(context).primaryColor,
           actions: [
@@ -80,7 +83,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 if (isNullOrEmpty(proxyConfig)) {
                   debugPrint("proxyConfig:$proxyConfig");
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: const Text('参数请填写完整!'),
+                      content: Text(S.of(context).text_check_parameters),
                       backgroundColor: Colors.purple.withOpacity(0.4)));
                   return;
                 }
@@ -110,14 +113,15 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                   TextField(
                       readOnly: widget.onData.isNotEmpty,
                       controller: _controller_proxyName,
-                      decoration: const InputDecoration(
-                        labelText: '配置名称',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: S.of(context).text_config_name,
+                        border: const OutlineInputBorder(),
                       ),
                       onTap: () {
                         if (widget.onData.isNotEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: const Text('配置名称不可修改!'),
+                              content: Text(
+                                  S.of(context).text_config_cannot_be_modified),
                               backgroundColor: Colors.purple.withOpacity(0.4)));
                         }
                       }),
@@ -128,39 +132,43 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                   const SizedBox(height: 20.0),
                   TextField(
                     controller: _controller_proxyHost,
-                    decoration: const InputDecoration(
-                      labelText: '代理地址',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: S.of(context).text_proxy_addr,
+                      border: const OutlineInputBorder(),
                     ),
                     onChanged: (value) {
                       // 校验只能输入ip地址
-                      if (value.isNotEmpty && !RegExp(r'^[0-9.]+$').hasMatch(value)) {
-                        _controller_proxyHost.text = value.substring(0, value.length - 1);
+                      if (value.isNotEmpty &&
+                          !RegExp(r'^[0-9.]+$').hasMatch(value)) {
+                        _controller_proxyHost.text =
+                            value.substring(0, value.length - 1);
                       }
-                      _debounce.call(context,checkConnect);
+                      _debounce.call(context, checkConnect);
                     },
                   ),
                   const SizedBox(height: 20.0),
                   TextField(
                     controller: _controller_proxyPort,
-                    decoration: const InputDecoration(
-                      labelText: '代理端口',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: S.of(context).text_proxy_port,
+                      border: const OutlineInputBorder(),
                     ),
                     onChanged: (value) {
                       // 校验只能输入数字
-                      if (value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
-                        _controller_proxyPort.text = value.substring(0, value.length - 1);
+                      if (value.isNotEmpty &&
+                          !RegExp(r'^[0-9]+$').hasMatch(value)) {
+                        _controller_proxyPort.text =
+                            value.substring(0, value.length - 1);
                       }
-                      _debounce.call(context,checkConnect);
+                      _debounce.call(context, checkConnect);
                     },
                   ),
                   const SizedBox(height: 20.0),
                   TextField(
                     controller: _controller_proxyUser,
-                    decoration: const InputDecoration(
-                      labelText: '名户名',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: S.of(context).text_proxy_username,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 20.0),
@@ -172,11 +180,11 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                     obscureText: true,
                     // 用于隐藏密码的字符，默认为"*"
                     obscuringCharacter: "*",
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       // 输入框的标签文本
-                      labelText: '密码',
+                      labelText: S.of(context).text_proxy_passworld,
                       // 输入框的边框样式
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -188,24 +196,21 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
     final ip = _controller_proxyHost.text;
     final port = _controller_proxyPort.text;
 
-    if (ip.isEmpty || port.isEmpty){
-      return ;
+    if (ip.isEmpty || port.isEmpty) {
+      return;
     }
     debugPrint("checkConnect:$ip:$port");
-    try{
-      final socket = await Socket.connect(ip, int.parse(port), timeout: const Duration(seconds: 1));
+    try {
+      final socket = await Socket.connect(ip, int.parse(port),
+          timeout: const Duration(seconds: 1));
       socket.close();
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('connect success'),
-          backgroundColor: Colors.greenAccent)
-      );
-    }catch(e){
+          backgroundColor: Colors.greenAccent));
+    } catch (e) {
       debugPrint(e.toString());
     }
-
   }
-
 }
 
 class ProxyType extends StatefulWidget {
@@ -245,7 +250,9 @@ class _ProxyTypeState extends State<ProxyType> {
       // 设置DropdownMenu的宽度将与其父级的宽度相同
       expandedInsets: EdgeInsets.zero,
       // 设置初始选中项为_http
-      initialSelection: widget.controller.text == defaultValue ? proxyItem.socks5 : proxyItem.http,
+      initialSelection: widget.controller.text == defaultValue
+          ? proxyItem.socks5
+          : proxyItem.http,
       // 关联的控制器
       controller: widget.controller,
       // 点击时不自动获取焦点
@@ -253,7 +260,7 @@ class _ProxyTypeState extends State<ProxyType> {
       // 禁用搜索功能
       enableSearch: false,
       // 菜单标签
-      label: const Text('代理类型'),
+      label: Text(S.of(context).text_proxy_type),
       // 选择项时的回调
       onSelected: (proxyItem? item) {
         setState(() {
@@ -261,7 +268,8 @@ class _ProxyTypeState extends State<ProxyType> {
         });
       },
       // 生成下拉菜单项的列表
-      dropdownMenuEntries: proxyItem.values.map<DropdownMenuEntry<proxyItem>>((proxyItem item) {
+      dropdownMenuEntries:
+          proxyItem.values.map<DropdownMenuEntry<proxyItem>>((proxyItem item) {
         // 为每个proxyItem生成一个DropdownMenuEntry
         return DropdownMenuEntry<proxyItem>(
           value: item, // 设置菜单项的值

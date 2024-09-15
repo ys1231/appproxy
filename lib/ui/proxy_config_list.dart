@@ -5,6 +5,7 @@ import 'package:appproxy/events/app_events.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../generated/l10n.dart';
 import 'addproxy.dart';
 
 class ProxyListHome extends StatefulWidget {
@@ -105,17 +106,17 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: const Text("提示"),
-            content: const Text("是否删除该代理配置？"),
+            title: Text(S.of(context).text_tips),
+            content: Text(S.of(context).text_delete_proxy_tips),
             actions: [
               TextButton(
-                child: const Text("取消"),
+                child: Text(S.current.text_cancel),
                 onPressed: () {
                   Navigator.of(context).pop(false);
                 },
               ),
               TextButton(
-                child: const Text("确定"),
+                child: Text(S.of(context).text_confirm),
                 onPressed: () {
                   Navigator.of(context).pop(true);
                 },
@@ -163,7 +164,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     // debugPrint("---- ProxyListHome build call: $_dataLists");
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Server 配置列表'),
+        title: Text('Server ${S.of(context).text_server_config}'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: ListView.separated(
@@ -275,7 +276,7 @@ class AddProxyButton extends StatelessWidget {
           ),
 
           // 在UI中创建一个带内边距的子组件，用于显示“添加代理”按钮
-          child: const Padding(
+          child: Padding(
               // 设置四周的内边距为8.0
               padding: EdgeInsets.all(8.0),
               // 使用IntrinsicWidth组件来确定其子组件的自然宽度
@@ -289,15 +290,16 @@ class AddProxyButton extends StatelessWidget {
                   // 子组件数组，包括一个图标和一个文本
                   children: [
                     // 添加图标组件
-                    Icon(Icons.add, color: Colors.white),
+                    const Icon(Icons.add, color: Colors.white),
                     // 在图标和文本之间添加一个宽度为10.0的空白间隔
-                    SizedBox(width: 5.0),
+                    const SizedBox(width: 5.0),
                     // 添加文本组件，显示“添加代理”文本
                     Text(
-                      "添加代理",
-                      style: TextStyle(fontSize: 16.0, color: Colors.white),
+                      S.of(context).text_add_proxy,
+                      style:
+                          const TextStyle(fontSize: 16.0, color: Colors.white),
                     ),
-                    SizedBox(width: 5.0),
+                    const SizedBox(width: 5.0),
                   ],
                 ),
               )),
