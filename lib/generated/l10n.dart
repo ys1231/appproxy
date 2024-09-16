@@ -449,17 +449,14 @@ class AppLocalizationDelegate extends LocalizationsDelegate<S> {
     return const <Locale>[
       Locale.fromSubtags(languageCode: 'en'),
       Locale.fromSubtags(languageCode: 'en', countryCode: 'US'),
-      Locale.fromSubtags(
-          languageCode: 'zh', scriptCode: 'Hans', countryCode: 'CN'),
+      Locale.fromSubtags(languageCode: 'zh', countryCode: 'CN'),
     ];
   }
 
   @override
   bool isSupported(Locale locale) => _isSupported(locale);
-
   @override
   Future<S> load(Locale locale) => S.load(locale);
-
   @override
   bool shouldReload(AppLocalizationDelegate old) => false;
 

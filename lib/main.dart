@@ -34,7 +34,8 @@ class MyApp extends StatelessWidget {
         if (result.isNotEmpty) {
           debugPrint(locale?.languageCode);
           if (locale.toString().contains("zh")) {
-            return locale;
+            return const Locale('zh', 'CN');
+            ;
           } else {
             return const Locale('en', 'US');
           }

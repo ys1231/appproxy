@@ -1,5 +1,5 @@
 // DO NOT EDIT. This is code generated via package:intl/generate_localized.dart
-// This is a library that provides messages for a zh_Hans_CN locale. All the
+// This is a library that provides messages for a zh_CN locale. All the
 // messages from the main program should be duplicated here with the same
 // function name.
 
@@ -18,7 +18,7 @@ final messages = new MessageLookup();
 typedef String MessageIfAbsent(String messageStr, List<dynamic> args);
 
 class MessageLookup extends MessageLookupByLibrary {
-  String get localeName => 'zh_Hans_CN';
+  String get localeName => 'zh_CN';
 
   final messages = _notInlinedMessages(_notInlinedMessages);
 
