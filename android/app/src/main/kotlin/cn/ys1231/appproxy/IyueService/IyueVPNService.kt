@@ -99,13 +99,16 @@ class IyueVPNService : VpnService() {
 //            .addDnsServer("192.168.10.1")
             .setSession(packageName)
         val allowedApps = jsonToList(data["appProxyPackageList"].toString())
-//        builder.addDisallowedApplication(packageName)
-        for (appPackageName in allowedApps) {
-            try {
-                Log.d(TAG, "addAllowedApplication: $appPackageName")
-                builder.addAllowedApplication(appPackageName)
-            } catch (e: Exception) {
-                Log.e(TAG, "addAllowedApplication: ${e.message}")
+        if(allowedApps.isEmpty()){
+            builder.addDisallowedApplication(packageName)
+        }else{
+            for (appPackageName in allowedApps) {
+                try {
+                    Log.d(TAG, "addAllowedApplication: $appPackageName")
+                    builder.addAllowedApplication(appPackageName)
+                } catch (e: Exception) {
+                    Log.e(TAG, "addAllowedApplication: ${e.message}")
+                }
             }
         }
 
