@@ -26,7 +26,7 @@
 ![Screenshot_20240604-205148](./assets/Screenshot_20240604-205148.png)
 
 ![Screenshot_20240604-205158](./assets/Screenshot_20240604-205158.png)
-
+![img.png](assets/img.png)
 # 依赖项目
 - [tun2socks](https://github.com/xjasonlyu/tun2socks)
 
