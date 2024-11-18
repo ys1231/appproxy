@@ -181,7 +181,7 @@ void showUpdateDialog(BuildContext context, String version, String arch,
   } catch (e) {
     if (retryCount < maxRetry) {
       retryCount++;
-      appproxyUpdateUrl = "https://ys1231.cn:82/modules/appproxy/appproxy.json";
+      appproxyUpdateUrl = "https://pfile.ys1231.cn/modules/appproxy/appproxy.json";
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(S.of(context).text_get_version_info_fail)));
       showUpdateDialog(context, version, arch,
