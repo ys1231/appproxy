@@ -160,7 +160,7 @@ void showUpdateDialog(BuildContext context, String version, String arch,
   try {
     var dio = Dio();
     Response value = await dio.get(appproxyUpdateUrl);
-    if (appproxyUpdateUrl.contains('ys1231.cn:82')) {
+    if (appproxyUpdateUrl.contains('ys1231.cn')) {
       var data = value.data;
       // 1 普通更新 0 不更新
       versionName = data['VersionName'];
