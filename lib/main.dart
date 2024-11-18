@@ -24,18 +24,16 @@ class MyApp extends StatelessWidget {
      */
     return MaterialApp(
       // 应用标题
-      title: 'iyue Flutter',
+      title: "appproxy",
       // 在调试模式下打开一个小“DEBUG”横幅，以指示应用程序处于调试模式。默认情况下（在调试模式下）处于打开状态，要将其关闭，请将构造函数参数设置为 false。在发布模式下这没有任何效果
       debugShowCheckedModeBanner: true,
-      localeResolutionCallback:
-          (Locale? locale, Iterable<Locale> supportedLocales) {
-        var result = supportedLocales
-            .where((element) => element.languageCode == locale?.languageCode);
+      localeResolutionCallback: (Locale? locale, Iterable<Locale> supportedLocales) {
+        var result =
+            supportedLocales.where((element) => element.languageCode == locale?.languageCode);
         if (result.isNotEmpty) {
           debugPrint(locale?.languageCode);
           if (locale.toString().contains("zh")) {
             return const Locale('zh', 'CN');
-            ;
           } else {
             return const Locale('en', 'US');
           }
@@ -87,7 +85,26 @@ class _iyueMainPageState extends State<iyueMainPage> {
       // 首页Widget
       const ProxyListHome(),
       // app配置列表
-      const AppConfigList(),
+      FutureBuilder(
+          // 先启动后加载
+          future: Future.delayed(const Duration(seconds: 1)),
+          builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
+            // 当计算状态为等待时，显示加载动画
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                // 显示一个加载动画
+                child: CircularProgressIndicator(),
+              );
+            } else if (snapshot.hasError) {
+              // 当 future 出现错误时，显示错误信息
+              return Center(
+                child: Text('Error: ${snapshot.error}'),
+              );
+            } else {
+              // 当计算完成时，显示app配置列表
+              return const AppConfigList();
+            }
+          }),
       // 设置页面
       const AppSettings(), // 设置页Widget
     ];

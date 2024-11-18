@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:event_bus/event_bus.dart';
 import 'package:flutter/foundation.dart';
 
 // 创建一个全局的EventBus实例

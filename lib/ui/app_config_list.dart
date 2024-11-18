@@ -84,7 +84,7 @@ class AppConfigState extends State<AppConfigList> {
   void initState() {
     super.initState();
     debugPrint("iyue-> initState");
-    _initData().then((value) => null);
+    _initData();
   }
 
   // 初始化数据
@@ -201,18 +201,14 @@ class AppConfigState extends State<AppConfigList> {
     if (searchText.isNotEmpty) {
       _searchAppListInfo = _jsonAppListInfo.where((itemMap) {
         final label =
-            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase() +
-                itemMap["packageName"];
+            PinyinHelper.getShortPinyin(itemMap["label"]).toLowerCase() + itemMap["packageName"];
         final search = searchText.toLowerCase();
-        return label.startsWith(search) ||
-            label.startsWith(search) ||
-            label.contains(search);
+        return label.startsWith(search) || label.startsWith(search) || label.contains(search);
       }).toList();
     }
     if (_searchAppListInfo.isNotEmpty) {
       // _searchAppListInfo = _jsonAppListInfo;
-      debugPrint(
-          "searchApp:${_searchAppListInfo.length} , all: $_searchAppListInfo");
+      debugPrint("searchApp:${_searchAppListInfo.length} , all: $_searchAppListInfo");
     } else {
       _searchAppListInfo = _jsonAppListInfo.toList();
     }
@@ -238,9 +234,7 @@ class AppConfigState extends State<AppConfigList> {
           backgroundColor: Theme.of(context).primaryColor,
           actions: <Widget>[
             AnimatedCrossFade(
-                crossFadeState: _showSearch
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
+                crossFadeState: _showSearch ? CrossFadeState.showSecond : CrossFadeState.showFirst,
                 firstChild: IconButton(
                     key: const ValueKey(1),
                     autofocus: true,
@@ -252,8 +246,7 @@ class AppConfigState extends State<AppConfigList> {
                           _searchController.clear();
                           _searchApp("");
                           Future.delayed(const Duration(milliseconds: 100), () {
-                            FocusScope.of(context)
-                                .requestFocus(_searchFocusNode);
+                            FocusScope.of(context).requestFocus(_searchFocusNode);
                           });
                         }
                       });
@@ -346,8 +339,7 @@ class AppConfigState extends State<AppConfigList> {
             } else {
               // 够建用于调用子控件CheckBox的key
               _cardKeys.clear();
-              _cardKeys = List.generate(
-                  _itemCount, (index) => GlobalKey<CardCheckboxState>());
+              _cardKeys = List.generate(_itemCount, (index) => GlobalKey<CardCheckboxState>());
               // 带刷新的动态列表
               return RefreshIndicator(
                 onRefresh: () {
@@ -367,20 +359,16 @@ class AppConfigState extends State<AppConfigList> {
                     // 创建从边缘反弹的滚动物理效果。
                     physics: const BouncingScrollPhysics(),
                     // 返回一个零尺寸的SizedBox
-                    separatorBuilder: (BuildContext context, int index) =>
-                        const SizedBox.shrink(),
+                    separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
                     // 列表项数量
-                    itemCount:
-                        _showSearch ? _searchAppListInfo.length : _itemCount,
+                    itemCount: _showSearch ? _searchAppListInfo.length : _itemCount,
                     // 列表项构建器
                     itemBuilder: (BuildContext context, int c_index) {
-                      Map<String, dynamic> itemMap = _showSearch
-                          ? _searchAppListInfo[c_index]
-                          : _jsonAppListInfo[c_index];
+                      Map<String, dynamic> itemMap =
+                          _showSearch ? _searchAppListInfo[c_index] : _jsonAppListInfo[c_index];
                       // 返回一个卡片
                       return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 10.0, vertical: 3.0),
+                        margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
                         key: ValueKey(c_index),
                         // 列表项内容
                         child: ListTile(
@@ -388,8 +376,8 @@ class AppConfigState extends State<AppConfigList> {
                             horizontalTitleGap: 20,
                             // textColor:Colors.deepOrangeAccent,
                             // 设置内容内边距
-                            contentPadding: const EdgeInsets.symmetric(
-                                vertical: 0.0, horizontal: 16.0),
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 0.0, horizontal: 16.0),
                             // 显示一个图标icon
                             leading: SizedBox(
                               width: 38, // 设置宽度
@@ -407,23 +395,18 @@ class AppConfigState extends State<AppConfigList> {
                             trailing: CardCheckbox(
                                 key: _cardKeys[c_index],
                                 // 根据是否选中列表初始化状态
-                                isSelected:
-                                    _selectedItemsMap[itemMap["packageName"]] ??
-                                        false,
+                                isSelected: _selectedItemsMap[itemMap["packageName"]] ?? false,
                                 // 子控件回调这个函数更新界面对应的数据
                                 callbackOnChanged: (newValue) {
                                   // 如果选中了，添加到代理列表
-                                  _selectedItemsMap[itemMap["packageName"]] =
-                                      newValue;
+                                  _selectedItemsMap[itemMap["packageName"]] = newValue;
                                   // 并且更新本地数据
                                   _appfile.saveAppConfig(_selectedItemsMap);
                                   if (newValue) {
                                     // 添加到代理列表
-                                    appProxyPackageList
-                                        .add(itemMap["packageName"]);
+                                    appProxyPackageList.add(itemMap["packageName"]);
                                   } else {
-                                    appProxyPackageList
-                                        .remove(itemMap["packageName"]);
+                                    appProxyPackageList.remove(itemMap["packageName"]);
                                   }
                                 }),
                             onTap: () {
@@ -443,8 +426,7 @@ class AppConfigState extends State<AppConfigList> {
 }
 
 class CardCheckbox extends StatefulWidget {
-  CardCheckbox(
-      {super.key, required this.isSelected, required this.callbackOnChanged});
+  CardCheckbox({super.key, required this.isSelected, required this.callbackOnChanged});
 
   // 构造函数
   Function(bool) callbackOnChanged;

@@ -8,7 +8,7 @@
 ## 项目简介
 
 1. 基于flutter和[tun2socks](https://github.com/xjasonlyu/tun2socks)开发.
-2. [appproxy](https://github.com/ys1231/appproxy) 是一个轻量级的VPN代理工具，支持HTTP, SOCKS5协议
+2. [appproxy](https://github.com/ys1231/appproxy) 是一个轻量级的VPN代理工具，支持HTTP, SOCKS5协议.
 3. 功能单只做代理,可分app代理, **_双击修改配置_** 逻辑比较简单, 主打一个能用就行.
 4. 出于学习熟悉flutter的目的去做的,分享给大家,顺便帮我测试一下.
 5. 加上[MoveCertificate](https://github.com/ys1231/MoveCertificate) 上下游都有了哈哈.
@@ -35,6 +35,7 @@
 ```shell
 # 如果发现Android Studio 调试flutter 自动跳到一个只读的文件,调试的时候无法修改代码,可以恢复上一个版本,是的坑.
 # 推荐 Android Studio Iguana | 2023.2.1 Patch 2
+# line 设置为 100
 flutter build apk --release --split-per-abi --build-name=$VERSION --obfuscate --split-debug-info ./build/
 ```
 
