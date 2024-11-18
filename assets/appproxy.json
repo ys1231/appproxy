@@ -1,5 +1,5 @@
 {
   "VersionName": "v0.0.8",
-  "ModifyContent": "\r\n1、perf(startup): ⚡ #12 Optimize startup speed",
+  "ModifyContent": "\r\n1、perf(startup): ⚡ #12 Optimize startup speed.\r\n2、fix(update): :bug: 国内更新通道, Domestic update channel",
   "DownloadUrl": "https://pfile.ys1231.cn/modules/appproxy/"
 }
