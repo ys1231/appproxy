@@ -87,7 +87,7 @@ class _iyueMainPageState extends State<iyueMainPage> {
       // app配置列表
       FutureBuilder(
           // 先启动后加载
-          future: Future.delayed(const Duration(seconds: 1)),
+          future: Future.delayed(const Duration(milliseconds: 100)),
           builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
             // 当计算状态为等待时，显示加载动画
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -105,6 +105,7 @@ class _iyueMainPageState extends State<iyueMainPage> {
               return const AppConfigList();
             }
           }),
+      // const AppConfigList(),
       // 设置页面
       const AppSettings(), // 设置页Widget
     ];

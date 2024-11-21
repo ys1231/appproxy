@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:appproxy/data/app_proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
 import 'package:appproxy/generated/l10n.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lpinyin/lpinyin.dart';
@@ -21,6 +23,46 @@ enum AppOption {
   showUserApp,
   // 系统app
   showSystemApp,
+}
+
+Future<List> invokeGetAppList(token) async {
+  BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+  /**
+   * 静态常量平台通道定义
+   * 该方法不接受任何参数，也不返回任何值。
+   * 它主要用于定义与原生平台通信的方法通道名称。
+   */
+  const platform = MethodChannel('cn.ys1231/appproxy');
+  // 远程调用获取应用列表
+  final appListString = await platform.invokeMethod('getAppList');
+  List<dynamic> rawList = jsonDecode(appListString);
+
+  // 处理每个应用的信息，包括 base64 解码
+  List<Map<String, dynamic>> processedList = rawList.map((item) {
+    Map<String, dynamic> processedItem = Map<String, dynamic>.from(item);
+
+    // 检查并解码 iconBytes
+    if (processedItem.containsKey("iconBytes") && processedItem["iconBytes"] != null) {
+      try {
+        Uint8List iconData = base64Decode(processedItem["iconBytes"]);
+        processedItem["iconBytes"] = iconData;
+      } catch (e) {
+        debugPrint("Error decoding iconBytes for app: ${processedItem["packageName"]}: $e");
+        // 如果解码失败，可以设置为 null 或保留原始 base64 字符串
+        processedItem["iconBytes"] = null;
+      }
+    }
+
+    return processedItem;
+  }).toList();
+
+  return processedList;
+}
+
+Future<List> getAppListInIsolate() async {
+  RootIsolateToken rootIsolateToken = RootIsolateToken.instance!;
+  // 其它线程获取应用列表
+  return Isolate.run(() => invokeGetAppList(rootIsolateToken));
 }
 
 class AppConfigState extends State<AppConfigList> {
@@ -64,13 +106,6 @@ class AppConfigState extends State<AppConfigList> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  /**
-   * 静态常量平台通道定义
-   * 该方法不接受任何参数，也不返回任何值。
-   * 它主要用于定义与原生平台通信的方法通道名称。
-   */
-  static const platform = MethodChannel('cn.ys1231/appproxy');
-
   // 当前选中的app列表
   late final Map<String, bool> _selectedItemsMap;
 
@@ -85,6 +120,7 @@ class AppConfigState extends State<AppConfigList> {
     super.initState();
     debugPrint("iyue-> initState");
     _initData();
+    getAppList();
   }
 
   // 初始化数据
@@ -141,12 +177,14 @@ class AppConfigState extends State<AppConfigList> {
       if (!_useCached || _cachedAppListInfo.isEmpty) {
         // 清理缓存数据
         _cachedAppListInfo.clear();
-        // 远程调用获取应用列表
-        final appList = await platform.invokeMethod('getAppList');
-        _cachedAppListInfo = jsonDecode(appList);
+        // 多线程获取应用列表
+        debugPrint("iyue-> call  getAppListInIsolate");
+        _cachedAppListInfo = await getAppListInIsolate();
+        debugPrint("iyue-> call  getAppListInIsolate end");
         // 获取之后使用缓存数据
         _useCached = true;
         debugPrint("call update app list!");
+        setState(() {});
       }
 
       _jsonAppListInfo.clear();
@@ -228,132 +266,118 @@ class AppConfigState extends State<AppConfigList> {
      * 构建一个FutureBuilder，用于根据计算的状态显示不同的内容。
      * @return 返回一个FutureBuilder，根据计算的状态显示加载动画、错误信息或计算结果。
      */
+    // 够建用于调用子控件CheckBox的key
+    _cardKeys.clear();
+    _cardKeys = List.generate(_itemCount, (index) => GlobalKey<CardCheckboxState>());
+
     return Scaffold(
-      appBar: AppBar(
-          title: Text('APP ${S.of(context).text_app_config_list}'),
-          backgroundColor: Theme.of(context).primaryColor,
-          actions: <Widget>[
-            AnimatedCrossFade(
-                crossFadeState: _showSearch ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                firstChild: IconButton(
-                    key: const ValueKey(1),
-                    autofocus: true,
-                    onPressed: () {
-                      debugPrint("click search");
-                      setState(() {
-                        _showSearch = !_showSearch;
-                        if (_showSearch) {
-                          _searchController.clear();
-                          _searchApp("");
-                          Future.delayed(const Duration(milliseconds: 100), () {
-                            FocusScope.of(context).requestFocus(_searchFocusNode);
+        appBar: AppBar(
+            title: Text('APP ${S.of(context).text_app_config_list}'),
+            backgroundColor: Theme.of(context).primaryColor,
+            actions: <Widget>[
+              AnimatedCrossFade(
+                  crossFadeState:
+                      _showSearch ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                  firstChild: IconButton(
+                      key: const ValueKey(1),
+                      autofocus: true,
+                      onPressed: () {
+                        debugPrint("click search");
+                        setState(() {
+                          _showSearch = !_showSearch;
+                          if (_showSearch) {
+                            _searchController.clear();
+                            _searchApp("");
+                            Future.delayed(const Duration(milliseconds: 100), () {
+                              FocusScope.of(context).requestFocus(_searchFocusNode);
+                            });
+                          }
+                        });
+                      },
+                      icon: const Icon(Icons.search)),
+                  secondChild: SizedBox(
+                    key: const ValueKey(2),
+                    width: 150,
+                    child: TextField(
+                      key: const ValueKey(3),
+                      controller: _searchController,
+                      cursorColor: Colors.black54,
+                      autofocus: true,
+                      focusNode: _searchFocusNode,
+                      decoration: InputDecoration(
+                          hintText: S.of(context).text_search_app,
+                          // hintStyle: TextStyle(color: Colors.white),
+                          border: InputBorder.none),
+                      style: const TextStyle(color: Colors.white),
+                      onChanged: (value) {
+                        debugPrint("search: -------- onChanged ----- $value");
+                        _searchApp(value);
+                      },
+                      onTapOutside: (PointerDownEvent event) {
+                        debugPrint(
+                            "search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
+                        if (event.localPosition.dx > 340) {
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            exitSearch();
                           });
                         }
-                      });
-                    },
-                    icon: const Icon(Icons.search)),
-                secondChild: SizedBox(
-                  key: const ValueKey(2),
-                  width: 150,
-                  child: TextField(
-                    key: const ValueKey(3),
-                    controller: _searchController,
-                    cursorColor: Colors.black54,
-                    autofocus: true,
-                    focusNode: _searchFocusNode,
-                    decoration: InputDecoration(
-                        hintText: S.of(context).text_search_app,
-                        // hintStyle: TextStyle(color: Colors.white),
-                        border: InputBorder.none),
-                    style: const TextStyle(color: Colors.white),
-                    onChanged: (value) {
-                      debugPrint("search: -------- onChanged ----- $value");
-                      _searchApp(value);
-                    },
-                    onTapOutside: (PointerDownEvent event) {
-                      debugPrint(
-                          "search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
-                      if (event.localPosition.dx > 340) {
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          exitSearch();
-                        });
-                      }
-                    },
+                      },
+                    ),
                   ),
-                ),
-                duration: const Duration(microseconds: 10)),
-            PopupMenuButton(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (AppOption value) {
-                  switch (value) {
-                    case AppOption.selectAll:
-                      _selectAll = !_selectAll;
-                      updateSelectAll(_selectAll);
-                      break;
-                    case AppOption.showUserApp:
-                      _showUserAppSelected = !_showUserAppSelected;
-                      updateShowUserApp(_showUserAppSelected);
-                      _selectAll = false;
-                      break;
-                    case AppOption.showSystemApp:
-                      _showSystemAppSelected = !_showSystemAppSelected;
-                      updateShowSystemApp(_showSystemAppSelected);
-                      _selectAll = false;
-                      break;
-                  }
-                },
-                itemBuilder: (BuildContext context) {
-                  return [
-                    CheckedPopupMenuItem<AppOption>(
-                      checked: _selectAll,
-                      value: AppOption.selectAll,
-                      child: Text(S.of(context).text_select_all),
-                    ),
-                    CheckedPopupMenuItem<AppOption>(
-                      checked: _showUserAppSelected,
-                      value: AppOption.showUserApp,
-                      child: Text(S.of(context).text_show_user_app),
-                    ),
-                    CheckedPopupMenuItem<AppOption>(
-                        checked: _showSystemAppSelected,
-                        value: AppOption.showSystemApp,
-                        child: Text(S.of(context).text_show_system_app))
-                  ];
-                })
-          ]),
-      body: FutureBuilder(
-          future: getAppList(), // 用于FutureBuilder的异步计算
-          builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
-            // 异步快照的构建器回调
-            // 当计算状态为等待时，显示加载动画
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                // 显示一个加载动画
-                child: CircularProgressIndicator(),
-              );
-            } else if (snapshot.hasError) {
-              // 当计算出现错误时，显示错误信息
-              return Center(
-                child: Text('Error: ${snapshot.error}'),
-              );
-            } else {
-              // 够建用于调用子控件CheckBox的key
-              _cardKeys.clear();
-              _cardKeys = List.generate(_itemCount, (index) => GlobalKey<CardCheckboxState>());
-              // 带刷新的动态列表
-              return RefreshIndicator(
-                onRefresh: () {
-                  // 当调用此函数时，会延迟1秒后执行[getAppList]函数
-                  return Future.delayed(const Duration(milliseconds: 500), () {
-                    // 下拉刷新触发整个重新build
-                    setState(() {
-                      _useCached = false;
-                      debugPrint("onRefresh");
-                    });
-                  });
-                },
-                // 带滚动条的列表
-                child: Scrollbar(
+                  duration: const Duration(microseconds: 10)),
+              PopupMenuButton(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (AppOption value) {
+                    switch (value) {
+                      case AppOption.selectAll:
+                        _selectAll = !_selectAll;
+                        updateSelectAll(_selectAll);
+                        break;
+                      case AppOption.showUserApp:
+                        _showUserAppSelected = !_showUserAppSelected;
+                        updateShowUserApp(_showUserAppSelected);
+                        _selectAll = false;
+                        break;
+                      case AppOption.showSystemApp:
+                        _showSystemAppSelected = !_showSystemAppSelected;
+                        updateShowSystemApp(_showSystemAppSelected);
+                        _selectAll = false;
+                        break;
+                    }
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return [
+                      CheckedPopupMenuItem<AppOption>(
+                        checked: _selectAll,
+                        value: AppOption.selectAll,
+                        child: Text(S.of(context).text_select_all),
+                      ),
+                      CheckedPopupMenuItem<AppOption>(
+                        checked: _showUserAppSelected,
+                        value: AppOption.showUserApp,
+                        child: Text(S.of(context).text_show_user_app),
+                      ),
+                      CheckedPopupMenuItem<AppOption>(
+                          checked: _showSystemAppSelected,
+                          value: AppOption.showSystemApp,
+                          child: Text(S.of(context).text_show_system_app))
+                    ];
+                  })
+            ]),
+        body: RefreshIndicator(
+          onRefresh: () {
+            // 当调用此函数时，会延迟1秒后执行[getAppList]函数
+            return Future.delayed(const Duration(milliseconds: 500), () {
+              debugPrint("onRefresh");
+              setState(() {
+                _useCached = false;
+                getAppList();
+              });
+            });
+          },
+          // 带滚动条的列表
+          child: _useCached
+              ? Scrollbar(
                   // 列表
                   child: ListView.separated(
                     // 创建从边缘反弹的滚动物理效果。
@@ -382,10 +406,9 @@ class AppConfigState extends State<AppConfigList> {
                             leading: SizedBox(
                               width: 38, // 设置宽度
                               height: 38, // 设置高度
-                              child: Image.memory(
-                                base64Decode(itemMap["iconBytes"]),
-                                fit: BoxFit.cover, // 保持图片的宽高比
-                              ),
+                              child: itemMap["iconBytes"] != null // 保持图片的宽高比
+                                  ? Image.memory(itemMap["iconBytes"], fit: BoxFit.cover)
+                                  : const Icon(Icons.accessibility),
                             ),
                             // 标题
                             title: Text(itemMap["label"]),
@@ -417,11 +440,9 @@ class AppConfigState extends State<AppConfigList> {
                       );
                     },
                   ),
-                ),
-              );
-            }
-          }),
-    );
+                )
+              : const Center(child: CircularProgressIndicator()),
+        ));
   }
 }
 
