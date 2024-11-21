@@ -62,8 +62,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   // 在这里处理从 AddProxyButton 返回的数据 添加代理配置到列表
   void handleConfigData(Map<String, dynamic> data, {bool isAdd = false}) {
-    if (!isAdd &&
-        _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
+    if (!isAdd && _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
       debugPrint("handleConfigData Data already exists in the list, skipping.");
       return;
     }
@@ -84,8 +83,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
     setState(() {
-      debugPrint(
-          'Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      debugPrint('Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
     });
   }
 
@@ -94,14 +92,12 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     _dataLists.removeWhere((item) => item['proxyName'] == data['proxyName']);
     _proxyConfigData.deleteProxyConfig(_dataLists);
     setState(() {
-      debugPrint(
-          'delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      debugPrint('delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
     });
   }
 
   // 显示提示是否删除代理
-  Future<void> _showDeleteDialog(
-      BuildContext context, Map<String, dynamic> data) async {
+  Future<void> _showDeleteDialog(BuildContext context, Map<String, dynamic> data) async {
     bool isDelete = await showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -186,13 +182,11 @@ class _ProxyListHomeState extends State<ProxyListHome> {
             child: GestureDetector(
                 child: SwitchListTile(
                   // 设置选中状态
-                  value: _isSelectedProxyName == c_data["proxyName"]
-                      ? true
-                      : false,
+                  value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
                   // 设置标题和副标题
                   title: Text('${c_data["proxyName"]}'),
-                  subtitle: Text(
-                      '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+                  subtitle:
+                      Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
                   // 设置switch的onChanged事件
                   onChanged: (bool value) {
                     setState(() {
@@ -204,8 +198,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                         _stopProxy();
                         _isSelectedProxyName = "";
                       }
-                      debugPrint(
-                          "current index:$c_index select: $_isSelectedProxyName");
+                      debugPrint("current index:$c_index select: $_isSelectedProxyName");
                     });
                   },
                 ),
@@ -216,10 +209,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                 },
                 // 设置双击事件
                 onDoubleTap: () {
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (BuildContext context) {
-                    return AddProxyWidget(
-                        onDataFetched: handleConfigData, onData: c_data);
+                  Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
+                    return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
                   }));
                 }),
           );
@@ -248,8 +239,8 @@ class AddProxyButton extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) => AddProxyWidget(
-                    onDataFetched: onDataFetched, onData: const {})),
+                builder: (context) =>
+                    AddProxyWidget(onDataFetched: onDataFetched, onData: const {})),
           );
         },
         child: Container(
@@ -296,8 +287,7 @@ class AddProxyButton extends StatelessWidget {
                     // 添加文本组件，显示“添加代理”文本
                     Text(
                       S.of(context).text_add_proxy,
-                      style:
-                          const TextStyle(fontSize: 16.0, color: Colors.white),
+                      style: const TextStyle(fontSize: 16.0, color: Colors.white),
                     ),
                     const SizedBox(width: 5.0),
                   ],
