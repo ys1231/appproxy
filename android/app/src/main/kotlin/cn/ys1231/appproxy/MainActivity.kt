@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "cn.ys1231/appproxy"
     private val CHANNEL_VPN = "cn.ys1231/appproxy/vpn"
     private val CHANNEL_APP_UPDATE = "cn.ys1231/appproxy/appupdate"
+    private var FLUTTER_VPN_CHANNEL: MethodChannel? = null
 
     private var utils: Utils? = null
     private var intentVpnService: Intent? = null
@@ -66,6 +67,22 @@ class MainActivity : FlutterActivity() {
     private fun startVpnService() {
         Log.d(TAG, "startVpnService: ${currentProxy.toString()}")
         iyueVpnService?.startVpnService(currentProxy!!)
+
+        // 检测VPN服务是否停止 通知 Flutter 更新 ui
+        Thread {
+            while (true) {
+                Log.d(TAG, "check iyueVpnService isRunning: " + iyueVpnService?.isRunning())
+
+                if (iyueVpnService?.isRunning() == true) {
+                    Thread.sleep(1000)
+                } else {
+                    runOnUiThread {
+                        FLUTTER_VPN_CHANNEL!!.invokeMethod("stopVpn", null)
+                    }
+                    break
+                }
+            }
+        }.start()
     }
 
     private fun stopVpnService() {
@@ -98,10 +115,12 @@ class MainActivity : FlutterActivity() {
 
             }
         }
-        MethodChannel(
+
+        FLUTTER_VPN_CHANNEL = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL_VPN
-        ).setMethodCallHandler { call, result ->
+        )
+        FLUTTER_VPN_CHANNEL!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startVpn" -> {
                     try {

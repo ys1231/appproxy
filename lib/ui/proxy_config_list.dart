@@ -32,13 +32,23 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   static const platform = MethodChannel("cn.ys1231/appproxy/vpn");
 
   // 当前需要启动的代理配置
-  Map<String, dynamic> _currentData = {};
+  Map<String, dynamic> _currentProxyData = {};
 
   @override
   void initState() {
     super.initState();
     debugPrint("---- ProxyListHome initState call ");
     initProxyConfig();
+
+    // 在Flutter端处理来自原生的调用
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'stopVpn') {
+        // 执行Flutter逻辑
+        setState(() {
+          _stopProxy();
+        });
+      }
+    });
   }
 
   void initProxyConfig() {
@@ -126,14 +136,16 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   // 启动VPN
-  void _startProxy() async {
-    _currentData['appProxyPackageList'] = appProxyPackageList.getListString();
+  void _startProxy(data) async {
+    _isSelectedProxyName = data["proxyName"];
+    _currentProxyData = data;
+    _currentProxyData['appProxyPackageList'] = appProxyPackageList.getListString();
     try {
-      bool result = await platform.invokeMethod('startVpn', _currentData);
+      bool result = await platform.invokeMethod('startVpn', _currentProxyData);
       if (result) {
-        debugPrint("---- ProxyListHome startVpn: $_currentData success");
+        debugPrint("---- ProxyListHome startVpn: $_currentProxyData success");
       } else {
-        debugPrint("---- ProxyListHome startVpn: $_currentData fail");
+        debugPrint("---- ProxyListHome startVpn: $_currentProxyData fail");
         _isSelectedProxyName = "";
       }
     } on PlatformException catch (e) {
@@ -144,6 +156,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   // 关闭VPN
   void _stopProxy() async {
     try {
+      // 控制关闭VPN
+      _isSelectedProxyName = "";
       bool result = await platform.invokeMethod('stopVpn');
       if (result) {
         debugPrint("---- ProxyListHome stopVpn success");
@@ -191,12 +205,9 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                   onChanged: (bool value) {
                     setState(() {
                       if (value) {
-                        _isSelectedProxyName = c_data["proxyName"];
-                        _currentData = c_data;
-                        _startProxy();
+                        _startProxy(c_data);
                       } else {
                         _stopProxy();
-                        _isSelectedProxyName = "";
                       }
                       debugPrint("current index:$c_index select: $_isSelectedProxyName");
                     });
