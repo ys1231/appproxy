@@ -30,18 +30,17 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL_VPN = "cn.ys1231/appproxy/vpn"
     private val CHANNEL_APP_UPDATE = "cn.ys1231/appproxy/appupdate"
     private var FLUTTER_VPN_CHANNEL: MethodChannel? = null
+    private var FLUTTER_CHANNEL: MethodChannel? = null
 
     private var utils: Utils? = null
     private var intentVpnService: Intent? = null
     private var iyueVpnService: IyueVPNService? = null
     private var isBind: Boolean = false
     private var currentProxy: Map<String, Any>? = null
-
     private var conn: ServiceConnection? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        utils = Utils(this)
         intentVpnService = Intent(this, IyueVPNService::class.java)
         conn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -99,15 +98,17 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        utils = Utils(this)
 
-        MethodChannel(
+        FLUTTER_CHANNEL = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL
-        ).setMethodCallHandler { call, result ->
+        )
+        FLUTTER_CHANNEL!!.setMethodCallHandler { call, result ->
             if (call.method == "getAppList") {
                 try {
                     Log.d(TAG, "configureFlutterEngine ${call.method} ")
-                    val appList = Utils(this).getAppList()
+                    val appList = utils!!.getAppList()
                     result.success(appList)
                 } catch (e: Exception) {
                     result.error("-1", e.message, null)
@@ -156,6 +157,17 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        // 遍历所有 app 通知刷新
+        Thread {
+            Log.d(TAG, "configureFlutterEngine: start get app list info")
+            utils!!.initAppList()
+            runOnUiThread {
+                Log.d(TAG, "configureFlutterEngine: call onRefresh")
+                FLUTTER_CHANNEL!!.invokeMethod("onRefresh", null)
+                Log.d(TAG, "configureFlutterEngine: end get app list info")
+            }
+        }.start()
     }
 
     private val VPN_REQUEST_CODE = 100

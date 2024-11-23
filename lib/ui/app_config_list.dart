@@ -112,6 +112,9 @@ class AppConfigState extends State<AppConfigList> {
   // app列表配置文件
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
 
+  // 远程调用通道
+  final platform = const MethodChannel('cn.ys1231/appproxy');
+
   // 用于更新调用子控件列表项选择状态
   List<GlobalKey<CardCheckboxState>> _cardKeys = [];
 
@@ -120,7 +123,12 @@ class AppConfigState extends State<AppConfigList> {
     super.initState();
     debugPrint("iyue-> initState");
     _initData();
-    getAppList();
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'onRefresh') {
+        // 执行Flutter逻辑
+        getAppList();
+      }
+    });
   }
 
   // 初始化数据

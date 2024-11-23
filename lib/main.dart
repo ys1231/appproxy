@@ -85,27 +85,7 @@ class _iyueMainPageState extends State<iyueMainPage> {
       // 首页Widget
       const ProxyListHome(),
       // app配置列表
-      FutureBuilder(
-          // 先启动后加载
-          future: Future.delayed(const Duration(milliseconds: 100)),
-          builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
-            // 当计算状态为等待时，显示加载动画
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                // 显示一个加载动画
-                child: CircularProgressIndicator(),
-              );
-            } else if (snapshot.hasError) {
-              // 当 future 出现错误时，显示错误信息
-              return Center(
-                child: Text('Error: ${snapshot.error}'),
-              );
-            } else {
-              // 当计算完成时，显示app配置列表
-              return const AppConfigList();
-            }
-          }),
-      // const AppConfigList(),
+      const AppConfigList(),
       // 设置页面
       const AppSettings(), // 设置页Widget
     ];

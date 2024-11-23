@@ -16,7 +16,10 @@ import java.io.ByteArrayOutputStream
 
 class Utils(private val context: Context) {
     private val TAG = "iyue->${this.javaClass.simpleName} "
-//    val sharedPreferences = context.getSharedPreferences("vpnconfig", Context.MODE_PRIVATE)
+
+    //val sharedPreferences = context.getSharedPreferences("vpnconfig", Context.MODE_PRIVATE)
+    private var appList: String? = null
+    private var isFirstGetApps: Boolean = true
 
     init {
         Log.d(TAG, "Utils init !")
@@ -30,8 +33,8 @@ class Utils(private val context: Context) {
      *
      * @return 返回包含已安装应用信息的JSON字符串，如果无应用满足条件或发生错误，则返回null。
      */
-    fun getAppList(): String? {
-
+    fun initAppList() {
+        Log.d(TAG, "initAppList: start")
         // 通过上下文获取PackageManager对象，用于管理安装的应用程序
         val pm = context.packageManager
 
@@ -78,7 +81,18 @@ class Utils(private val context: Context) {
         }
 
         // 使用Gson将应用信息列表转换为JSON字符串并返回
-        return Gson().toJson(appInfoList)
+        appList = Gson().toJson(appInfoList)
+        Log.d(TAG, "initAppList: end")
+    }
+
+    fun getAppList(): String? {
+        if (isFirstGetApps && appList != null) {
+            isFirstGetApps = false
+            return appList
+        } else {
+            initAppList()
+            return appList
+        }
     }
 
     private val PackageInfo.isSystemApp: Boolean
@@ -96,20 +110,4 @@ class Utils(private val context: Context) {
         return bitmap
     }
 
-//    public fun setVpnStatus(status: Boolean){
-//        var edit = sharedPreferences.edit()
-//        edit.putBoolean("vpnStatus", status)
-//        edit.commit()
-//    }
-//    public fun getVpnStatus(): Boolean{
-//        return sharedPreferences.getBoolean("vpnStatus", false)
-//    }
-//    public fun setProxyName(name: String){
-//        var edit = sharedPreferences.edit()
-//        edit.putString("proxyName", name)
-//        edit.commit()
-//    }
-//    public fun getProxyName(): String{
-//        return sharedPreferences.getString("proxyName", "") ?: ""
-//    }
 }

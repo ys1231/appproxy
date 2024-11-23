@@ -1,5 +1,5 @@
 {
-  "VersionName": "v0.0.8",
-  "ModifyContent": "\r\n1、perf(startup): ⚡ #12 Optimize startup speed.\r\n2、fix(update): :bug: 国内更新通道, Domestic update channel",
+  "VersionName": "v0.1.3",
+  "ModifyContent": "\n\rperf(UI): :zap:  优化启动速度,UI 界面卡顿, Optimize the startup speed, UI interface is stuck",
   "DownloadUrl": "https://pfile.ys1231.cn/modules/appproxy/"
 }
