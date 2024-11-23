@@ -138,11 +138,11 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                     ),
                     onChanged: (value) {
                       // 校验只能输入ip地址
-                      if (value.isNotEmpty &&
-                          !RegExp(r'^[0-9.]+$').hasMatch(value)) {
-                        _controller_proxyHost.text =
-                            value.substring(0, value.length - 1);
-                      }
+                      // if (value.isNotEmpty &&
+                      //     !RegExp(r'^[0-9.]+$').hasMatch(value)) {
+                      //   _controller_proxyHost.text =
+                      //       value.substring(0, value.length - 1);
+                      // }
                       _debounce.call(context, checkConnect);
                     },
                   ),
