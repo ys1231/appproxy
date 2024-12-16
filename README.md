@@ -13,7 +13,9 @@
 4. 出于学习熟悉flutter的目的去做的,分享给大家,顺便帮我测试一下.
 5. 加上[MoveCertificate](https://github.com/ys1231/MoveCertificate) 上下游都有了哈哈.
 
+## Star History
 
+[![Star History Chart](https://api.star-history.com/svg?repos=ys1231/appproxy&type=Date)](https://star-history.com/#ys1231/appproxy&Date)
 
 ## 附上截图
 
@@ -27,6 +29,7 @@
 
 ![Screenshot_20240604-205158](./assets/Screenshot_20240604-205158.png)
 ![img.png](assets/img.png)
+
 # 依赖项目
 - [tun2socks](https://github.com/xjasonlyu/tun2socks)
 
