@@ -1,0 +1,3 @@
+[submodule "tun2socks"]
+	path = tun2socks
+	url = https://github.com/xjasonlyu/tun2socks.git

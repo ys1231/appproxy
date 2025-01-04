@@ -124,7 +124,7 @@ class IyueVPNService : VpnService() {
             key.mtu = 1500
             key.device = "fd://" + vpnInterface!!.fd // <--- here
             key.setInterface("")
-            key.logLevel = "debug"
+            key.logLevel = "error"
             key.proxy =
                 "${proxyType}://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}" // <--- and here
             key.restAPI = ""

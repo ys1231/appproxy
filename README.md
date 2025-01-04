@@ -35,10 +35,30 @@
 
 # 开发
 
+## build tun2socks
+
+- `touch tun2socks/build.sh`
+
+```shell
+#!/bin/zsh
+set -x
+SCRIPT_DIR=$(dirname "\$0")
+cd "$SCRIPT_DIR"
+# init
+go install golang.org/x/mobile/cmd/gomobile@latest
+go get
+go get golang.org/x/mobile/bind
+make
+gomobile init
+gomobile bind -o ../android/app/libs/tun2socks.aar -target android ./engine
+ls ../android/app/libs/tun2socks.aar
+```
+
 ```shell
 # 如果发现Android Studio 调试flutter 自动跳到一个只读的文件,调试的时候无法修改代码,可以恢复上一个版本,是的坑.
 # 推荐 Android Studio Iguana | 2023.2.1 Patch 2
 # line 设置为 100
+tun2socks/build.sh
 flutter build apk --release --split-per-abi --build-name=$VERSION --obfuscate --split-debug-info ./build/
 ```
 
