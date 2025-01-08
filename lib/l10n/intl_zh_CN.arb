@@ -8,7 +8,7 @@
   "text_config_cannot_be_modified": "配置名称不可修改!",
   "text_proxy_addr": "代理地址",
   "text_proxy_port": "代理端口",
-  "text_proxy_username": "名户名",
+  "text_proxy_username": "用户名",
   "text_proxy_passworld": "密码",
   "text_proxy_type": "代理类型",
   "text_app_config_list": "配置列表",
