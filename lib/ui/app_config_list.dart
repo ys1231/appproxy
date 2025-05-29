@@ -42,12 +42,14 @@ Future<List> invokeGetAppList(token) async {
     Map<String, dynamic> processedItem = Map<String, dynamic>.from(item);
 
     // 检查并解码 iconBytes
-    if (processedItem.containsKey("iconBytes") && processedItem["iconBytes"] != null) {
+    if (processedItem.containsKey("iconBytes") &&
+        processedItem["iconBytes"] != null) {
       try {
         Uint8List iconData = base64Decode(processedItem["iconBytes"]);
         processedItem["iconBytes"] = iconData;
       } catch (e) {
-        debugPrint("Error decoding iconBytes for app: ${processedItem["packageName"]}: $e");
+        debugPrint(
+            "Error decoding iconBytes for app: ${processedItem["packageName"]}: $e");
         // 如果解码失败，可以设置为 null 或保留原始 base64 字符串
         processedItem["iconBytes"] = null;
       }
@@ -137,7 +139,13 @@ class AppConfigState extends State<AppConfigList> {
     // 同步已选择历史数据
     for (var key in _selectedItemsMap.keys) {
       if (_selectedItemsMap[key] == true) {
-        appProxyPackageList.add(key);
+        // 解析 key
+        final parts = key.split('|');
+        if (parts.length == 2) {
+          final packageName = parts[0];
+          final uid = int.tryParse(parts[1]) ?? 0;
+          appProxyPackageList.add(packageName, uid);
+        }
       }
     }
   }
@@ -163,12 +171,13 @@ class AppConfigState extends State<AppConfigList> {
 
   void updateSelectAll(isSelectAll) {
     setState(() {
-      debugPrint("updateSelectAll:$isSelectAll");
+      debugPrint("updateSelectAll: $isSelectAll");
       if (isSelectAll) {
         for (var app in _jsonAppListInfo) {
-          _selectedItemsMap[app["packageName"]] = true;
+          final key = "${app["packageName"]}|${app["uid"]}";
+          _selectedItemsMap[key] = true;
           // 添加到代理列表
-          appProxyPackageList.add(app["packageName"]);
+          appProxyPackageList.add(app["packageName"], app["uid"]);
         }
       } else {
         _selectedItemsMap.clear();
@@ -217,8 +226,10 @@ class AppConfigState extends State<AppConfigList> {
 
       // 把已选择的移到前面去
       _jsonAppListInfo.sort((a, b) {
-        bool? itemASelected = _selectedItemsMap[a["packageName"]] ?? false;
-        bool? itemBSelected = _selectedItemsMap[b["packageName"]] ?? false;
+        bool? itemASelected =
+            _selectedItemsMap['${a["packageName"]}|${a["uid"]}'] ?? false;
+        bool? itemBSelected =
+            _selectedItemsMap['${b["packageName"]}|${b["uid"]}'] ?? false;
         // 如果两个都未选中，保持原顺序
         if (!itemASelected && !itemBSelected) return 0;
         // 如果A被选中，放在前面
@@ -255,7 +266,8 @@ class AppConfigState extends State<AppConfigList> {
     }
     if (_searchAppListInfo.isNotEmpty) {
       // _searchAppListInfo = _jsonAppListInfo;
-      debugPrint("searchApp:${_searchAppListInfo.length} , all: $_searchAppListInfo");
+      debugPrint(
+          "searchApp:${_searchAppListInfo.length} , all: $_searchAppListInfo");
     } else {
       _searchAppListInfo = _jsonAppListInfo.toList();
     }
@@ -271,227 +283,271 @@ class AppConfigState extends State<AppConfigList> {
 
   @override
   Widget build(BuildContext context) {
-    /**
-     * 构建一个FutureBuilder，用于根据计算的状态显示不同的内容。
-     * @return 返回一个FutureBuilder，根据计算的状态显示加载动画、错误信息或计算结果。
-     */
-    // 够建用于调用子控件CheckBox的key
     _cardKeys.clear();
-    _cardKeys = List.generate(_itemCount, (index) => GlobalKey<CardCheckboxState>());
+    _cardKeys =
+        List.generate(_itemCount, (index) => GlobalKey<CardCheckboxState>());
 
-    return Scaffold(
-        appBar: AppBar(
-            title: Text('APP ${S.of(context).text_app_config_list}'),
-            backgroundColor: Theme.of(context).primaryColor,
-            actions: <Widget>[
-              AnimatedCrossFade(
-                  crossFadeState:
-                      _showSearch ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                  firstChild: IconButton(
-                      key: const ValueKey(1),
-                      autofocus: true,
-                      onPressed: () {
-                        debugPrint("click search");
-                        setState(() {
-                          _showSearch = !_showSearch;
-                          if (_showSearch) {
-                            _searchController.clear();
-                            _searchApp("");
-                            Future.delayed(const Duration(milliseconds: 100), () {
-                              FocusScope.of(context).requestFocus(_searchFocusNode);
+    // 用 PopScope 拦截返回键，搜索模式下优先退出搜索
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool result, x) {
+        if (!result && _showSearch) {
+          setState(() {
+            _showSearch = false;
+          });
+        } else if (!result) {
+          // 返回IndexedStack的第一页
+          debugPrint("iyue-> onPopInvokedWithResult: $result");
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+          appBar: AppBar(
+              title: Text('APP ${S.of(context).text_app_config_list}'),
+              backgroundColor: Theme.of(context).primaryColor,
+              actions: <Widget>[
+                AnimatedCrossFade(
+                    crossFadeState: _showSearch
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                    firstChild: IconButton(
+                        key: const ValueKey(1),
+                        autofocus: true,
+                        onPressed: () {
+                          debugPrint("click search");
+                          setState(() {
+                            _showSearch = !_showSearch;
+                            if (_showSearch) {
+                              _searchController.clear();
+                              _searchApp("");
+                              Future.delayed(const Duration(milliseconds: 100),
+                                  () {
+                                FocusScope.of(context)
+                                    .requestFocus(_searchFocusNode);
+                              });
+                            }
+                          });
+                        },
+                        icon: const Icon(Icons.search)),
+                    secondChild: SizedBox(
+                      key: const ValueKey(2),
+                      width: 150,
+                      child: TextField(
+                        key: const ValueKey(3),
+                        controller: _searchController,
+                        cursorColor: Colors.black54,
+                        autofocus: true,
+                        focusNode: _searchFocusNode,
+                        decoration: InputDecoration(
+                            hintText: S.of(context).text_search_app,
+                            // hintStyle: TextStyle(color: Colors.white),
+                            border: InputBorder.none),
+                        style: const TextStyle(color: Colors.white),
+                        onChanged: (value) {
+                          debugPrint("search: -------- onChanged ----- $value");
+                          _searchApp(value);
+                        },
+                        onTapOutside: (PointerDownEvent event) {
+                          debugPrint(
+                              "search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
+                          if (event.localPosition.dx > 340) {
+                            Future.delayed(const Duration(milliseconds: 300),
+                                () {
+                              exitSearch();
                             });
                           }
-                        });
-                      },
-                      icon: const Icon(Icons.search)),
-                  secondChild: SizedBox(
-                    key: const ValueKey(2),
-                    width: 150,
-                    child: TextField(
-                      key: const ValueKey(3),
-                      controller: _searchController,
-                      cursorColor: Colors.black54,
-                      autofocus: true,
-                      focusNode: _searchFocusNode,
-                      decoration: InputDecoration(
-                          hintText: S.of(context).text_search_app,
-                          // hintStyle: TextStyle(color: Colors.white),
-                          border: InputBorder.none),
-                      style: const TextStyle(color: Colors.white),
-                      onChanged: (value) {
-                        debugPrint("search: -------- onChanged ----- $value");
-                        _searchApp(value);
-                      },
-                      onTapOutside: (PointerDownEvent event) {
-                        debugPrint(
-                            "search: -------- onTapOutside ----- ${event.localPosition.dx} ${event.localPosition.dy}");
-                        if (event.localPosition.dx > 340) {
-                          Future.delayed(const Duration(milliseconds: 300), () {
-                            exitSearch();
-                          });
-                        }
+                        },
+                      ),
+                    ),
+                    duration: const Duration(microseconds: 10)),
+                PopupMenuButton(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (AppOption value) {
+                      switch (value) {
+                        case AppOption.selectAll:
+                          _selectAll = !_selectAll;
+                          updateSelectAll(_selectAll);
+                          break;
+                        case AppOption.showUserApp:
+                          _showUserAppSelected = !_showUserAppSelected;
+                          updateShowUserApp(_showUserAppSelected);
+                          _selectAll = false;
+                          break;
+                        case AppOption.showSystemApp:
+                          _showSystemAppSelected = !_showSystemAppSelected;
+                          updateShowSystemApp(_showSystemAppSelected);
+                          _selectAll = false;
+                          break;
+                      }
+                    },
+                    itemBuilder: (BuildContext context) {
+                      return [
+                        CheckedPopupMenuItem<AppOption>(
+                          checked: _selectAll,
+                          value: AppOption.selectAll,
+                          child: Text(S.of(context).text_select_all),
+                        ),
+                        CheckedPopupMenuItem<AppOption>(
+                          checked: _showUserAppSelected,
+                          value: AppOption.showUserApp,
+                          child: Text(S.of(context).text_show_user_app),
+                        ),
+                        CheckedPopupMenuItem<AppOption>(
+                            checked: _showSystemAppSelected,
+                            value: AppOption.showSystemApp,
+                            child: Text(S.of(context).text_show_system_app))
+                      ];
+                    })
+              ]),
+          body: RefreshIndicator(
+            onRefresh: () {
+              // 当调用此函数时，会延迟1秒后执行[getAppList]函数
+              return Future.delayed(const Duration(milliseconds: 500), () {
+                debugPrint("onRefresh");
+                setState(() {
+                  _useCached = false;
+                  getAppList();
+                });
+              });
+            },
+            // 带滚动条的列表
+            child: _useCached
+                ? Scrollbar(
+                    // 列表
+                    child: ListView.separated(
+                      // 创建从边缘反弹的滚动物理效果。
+                      physics: const BouncingScrollPhysics(),
+                      // 返回一个零尺寸的SizedBox
+                      separatorBuilder: (BuildContext context, int index) =>
+                          const SizedBox.shrink(),
+                      // 列表项数量
+                      itemCount:
+                          _showSearch ? _searchAppListInfo.length : _itemCount,
+                      // 列表项构建器
+                      itemBuilder: (BuildContext context, int c_index) {
+                        Map<String, dynamic> itemMap = _showSearch
+                            ? _searchAppListInfo[c_index]
+                            : _jsonAppListInfo[c_index];
+                        // 返回一个卡片
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 10.0, vertical: 3.0),
+                          key: ValueKey(c_index),
+                          // 列表项内容
+                          child: ListTile(
+                              // 设置水平标题间距
+                              horizontalTitleGap: 20,
+                              // textColor:Colors.deepOrangeAccent,
+                              // 设置内容内边距
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 0.0, horizontal: 16.0),
+                              // 显示一个图标icon
+                              leading: SizedBox(
+                                width: 38, // 设置宽度
+                                height: 38, // 设置高度
+                                child: itemMap["iconBytes"] != null // 保持图片的宽高比
+                                    ? Image.memory(itemMap["iconBytes"],
+                                        fit: BoxFit.cover)
+                                    : const Icon(Icons.accessibility),
+                              ),
+                              // 标题
+                              title: Text(itemMap["label"]),
+                              // 副标题
+                              subtitle: Text(itemMap["packageName"]),
+                              // 显示一个复选框
+                              trailing: CardCheckbox(
+                                  key: _cardKeys[c_index],
+                                  // 根据是否选中列表初始化状态
+                                  isSelected: _selectedItemsMap[
+                                          "${itemMap["packageName"]}|${itemMap["uid"]}"] ??
+                                      false,
+                                  // 子控件回调这个函数更新界面对应的数据
+                                  callbackOnChanged: (newValue) {
+                                    final key =
+                                        "${itemMap["packageName"]}|${itemMap["uid"]}";
+                                    _selectedItemsMap[key] = newValue;
+                                    // 并且更新本地数据
+                                    _appfile.saveAppConfig(_selectedItemsMap);
+                                    if (newValue) {
+                                      // 添加到代理列表
+                                      appProxyPackageList.add(
+                                          itemMap["packageName"],
+                                          itemMap["uid"]);
+                                    } else {
+                                      appProxyPackageList.remove(
+                                          itemMap["packageName"],
+                                          itemMap["uid"]);
+                                    }
+                                  }),
+                              onTap: () {
+                                // 调用子控件选择或取消选中 并回调 callbackOnChanged 更新数据
+                                _cardKeys[c_index]
+                                    .currentState!
+                                    .toggleCheckbox();
+                                // 同时刷新列表,选中的会移到最顶上,或取消置顶
+                                setState(() {
+                                  getAppList();
+                                });
+                                debugPrint("onTap:${itemMap["packageName"]}");
+                              }),
+                        );
                       },
                     ),
-                  ),
-                  duration: const Duration(microseconds: 10)),
-              PopupMenuButton(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (AppOption value) {
-                    switch (value) {
-                      case AppOption.selectAll:
-                        _selectAll = !_selectAll;
-                        updateSelectAll(_selectAll);
-                        break;
-                      case AppOption.showUserApp:
-                        _showUserAppSelected = !_showUserAppSelected;
-                        updateShowUserApp(_showUserAppSelected);
-                        _selectAll = false;
-                        break;
-                      case AppOption.showSystemApp:
-                        _showSystemAppSelected = !_showSystemAppSelected;
-                        updateShowSystemApp(_showSystemAppSelected);
-                        _selectAll = false;
-                        break;
-                    }
-                  },
-                  itemBuilder: (BuildContext context) {
-                    return [
-                      CheckedPopupMenuItem<AppOption>(
-                        checked: _selectAll,
-                        value: AppOption.selectAll,
-                        child: Text(S.of(context).text_select_all),
-                      ),
-                      CheckedPopupMenuItem<AppOption>(
-                        checked: _showUserAppSelected,
-                        value: AppOption.showUserApp,
-                        child: Text(S.of(context).text_show_user_app),
-                      ),
-                      CheckedPopupMenuItem<AppOption>(
-                          checked: _showSystemAppSelected,
-                          value: AppOption.showSystemApp,
-                          child: Text(S.of(context).text_show_system_app))
-                    ];
-                  })
-            ]),
-        body: RefreshIndicator(
-          onRefresh: () {
-            // 当调用此函数时，会延迟1秒后执行[getAppList]函数
-            return Future.delayed(const Duration(milliseconds: 500), () {
-              debugPrint("onRefresh");
-              setState(() {
-                _useCached = false;
-                getAppList();
-              });
-            });
-          },
-          // 带滚动条的列表
-          child: _useCached
-              ? Scrollbar(
-                  // 列表
-                  child: ListView.separated(
-                    // 创建从边缘反弹的滚动物理效果。
-                    physics: const BouncingScrollPhysics(),
-                    // 返回一个零尺寸的SizedBox
-                    separatorBuilder: (BuildContext context, int index) => const SizedBox.shrink(),
-                    // 列表项数量
-                    itemCount: _showSearch ? _searchAppListInfo.length : _itemCount,
-                    // 列表项构建器
-                    itemBuilder: (BuildContext context, int c_index) {
-                      Map<String, dynamic> itemMap =
-                          _showSearch ? _searchAppListInfo[c_index] : _jsonAppListInfo[c_index];
-                      // 返回一个卡片
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
-                        key: ValueKey(c_index),
-                        // 列表项内容
-                        child: ListTile(
-                            // 设置水平标题间距
-                            horizontalTitleGap: 20,
-                            // textColor:Colors.deepOrangeAccent,
-                            // 设置内容内边距
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 0.0, horizontal: 16.0),
-                            // 显示一个图标icon
-                            leading: SizedBox(
-                              width: 38, // 设置宽度
-                              height: 38, // 设置高度
-                              child: itemMap["iconBytes"] != null // 保持图片的宽高比
-                                  ? Image.memory(itemMap["iconBytes"], fit: BoxFit.cover)
-                                  : const Icon(Icons.accessibility),
-                            ),
-                            // 标题
-                            title: Text(itemMap["label"]),
-                            // 副标题
-                            subtitle: Text(itemMap["packageName"]),
-                            // 显示一个复选框
-                            trailing: CardCheckbox(
-                                key: _cardKeys[c_index],
-                                // 根据是否选中列表初始化状态
-                                isSelected: _selectedItemsMap[itemMap["packageName"]] ?? false,
-                                // 子控件回调这个函数更新界面对应的数据
-                                callbackOnChanged: (newValue) {
-                                  // 如果选中了，添加到代理列表
-                                  _selectedItemsMap[itemMap["packageName"]] = newValue;
-                                  // 并且更新本地数据
-                                  _appfile.saveAppConfig(_selectedItemsMap);
-                                  if (newValue) {
-                                    // 添加到代理列表
-                                    appProxyPackageList.add(itemMap["packageName"]);
-                                  } else {
-                                    appProxyPackageList.remove(itemMap["packageName"]);
-                                  }
-                                }),
-                            onTap: () {
-                              // 调用子控件选择或取消选中 并回调 callbackOnChanged 更新数据
-                              _cardKeys[c_index].currentState!.toggleCheckbox();
-                              // 同时刷新列表,选中的会移到最顶上,或取消置顶
-                              setState(() {
-                                getAppList();
-                              });
-                              debugPrint("onTap:${itemMap["packageName"]}");
-                            }),
-                      );
-                    },
-                  ),
-                )
-              : const Center(child: CircularProgressIndicator()),
-        ));
+                  )
+                : const Center(child: CircularProgressIndicator()),
+          )),
+    );
   }
 }
 
 class CardCheckbox extends StatefulWidget {
-  CardCheckbox({super.key, required this.isSelected, required this.callbackOnChanged});
+  const CardCheckbox(
+      {super.key, required this.isSelected, required this.callbackOnChanged});
 
   // 构造函数
-  Function(bool) callbackOnChanged;
-  bool isSelected;
+  final Function(bool) callbackOnChanged;
+  final bool isSelected;
 
   @override
   State<StatefulWidget> createState() => CardCheckboxState();
 }
 
 class CardCheckboxState extends State<CardCheckbox> {
+  late bool _isSelected;
+
+  @override
+  void initState() {
+    super.initState();
+    _isSelected = widget.isSelected;
+  }
+
+  @override
+  void didUpdateWidget(CardCheckbox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isSelected != widget.isSelected) {
+      _isSelected = widget.isSelected;
+    }
+  }
+
   // 外部调用刷新checkbox
   void toggleCheckbox() {
     setState(() {
-      // 触发刷新当前选中状态
-      widget.isSelected = !widget.isSelected;
-      // 调用回调函数更新数据
-      widget.callbackOnChanged(widget.isSelected);
+      _isSelected = !_isSelected;
+      widget.callbackOnChanged(_isSelected);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Checkbox(
-      value: widget.isSelected,
+      value: _isSelected,
       onChanged: (bool? newValue) {
         widget.callbackOnChanged(newValue!);
         setState(() {
-          widget.isSelected = newValue;
+          _isSelected = newValue;
         });
         // 如果需要，这里可以处理选中项的变化逻辑
-        debugPrint("index:$widget.index,newValue:$newValue");
+        debugPrint("index: $newValue");
       },
     );
   }

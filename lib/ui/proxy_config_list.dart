@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:app_settings/app_settings.dart';
+import 'package:appproxy/data/app_proxy_redsocks_service.dart';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/data/proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
@@ -77,7 +79,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   // 在这里处理从 AddProxyButton 返回的数据 添加代理配置到列表
   void handleConfigData(Map<String, dynamic> data, {bool isAdd = false}) {
-    if (!isAdd && _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
+    if (!isAdd &&
+        _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
       debugPrint("handleConfigData Data already exists in the list, skipping.");
       return;
     }
@@ -98,7 +101,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
     setState(() {
-      debugPrint('Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      debugPrint(
+          'Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
     });
   }
 
@@ -107,7 +111,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     _dataLists.removeWhere((item) => item['proxyName'] == data['proxyName']);
     _proxyConfigData.deleteProxyConfig(_dataLists);
     setState(() {
-      debugPrint('delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      debugPrint(
+          'delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
     });
   }
 
@@ -120,7 +125,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
   // 检测网络类型
   Future<bool> _checkWifiState() async {
-    final List<ConnectivityResult> connectivityResult = await (Connectivity().checkConnectivity());
+    final List<ConnectivityResult> connectivityResult =
+        await (Connectivity().checkConnectivity());
     if (connectivityResult.contains(ConnectivityResult.wifi)) {
       debugPrint('Wi-Fi connected');
       return true;
@@ -135,7 +141,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   // 显示提示是否删除代理
-  Future<void> _showDeleteDialog(BuildContext context, Map<String, dynamic> data) async {
+  Future<void> _showDeleteDialog(
+      BuildContext context, Map<String, dynamic> data) async {
     bool isDelete = await showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -163,9 +170,9 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
   }
 
-  // 启动VPN
+  // 启动VPN/透明代理
   void _startProxy(data) async {
-    if (await AppSetings.getCheckWifi()){
+    if (await AppSetings.getCheckWifi()) {
       bool isWifi = await _checkWifiState();
       if (!isWifi) {
         return;
@@ -173,13 +180,23 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     _isSelectedProxyName = data["proxyName"];
     _currentProxyData = data;
-    _currentProxyData['appProxyPackageList'] = appProxyPackageList.getListString();
+
     try {
-      bool result = await platform.invokeMethod('startVpn', _currentProxyData);
-      if (result) {
-        debugPrint("---- ProxyListHome startVpn: $_currentProxyData success");
+      bool result = false;
+      bool isTransparent = await AppSetings.getTransparentProxy();
+      if (isTransparent) {
+        _currentProxyData['appProxyPackageList'] =
+            appProxyPackageList.getUids();
+        result = await _startTransparentProxyWithRoot(_currentProxyData);
       } else {
-        debugPrint("---- ProxyListHome startVpn: $_currentProxyData fail");
+        _currentProxyData['appProxyPackageList'] =
+            appProxyPackageList.getPackagenameListString();
+        result = await platform.invokeMethod('startVpn', _currentProxyData);
+      }
+      if (result) {
+        debugPrint("---- ProxyListHome startProxy: $_currentProxyData success");
+      } else {
+        debugPrint("---- ProxyListHome startProxy: $_currentProxyData fail");
         _isSelectedProxyName = "";
       }
     } on PlatformException catch (e) {
@@ -187,20 +204,71 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
   }
 
-  // 关闭VPN
+  // 关闭VPN/透明代理
   void _stopProxy() async {
     try {
-      // 控制关闭VPN
       _isSelectedProxyName = "";
-      bool result = await platform.invokeMethod('stopVpn');
-      if (result) {
-        debugPrint("---- ProxyListHome stopVpn success");
+      bool result = false;
+      bool isTransparent = await AppSetings.getTransparentProxy();
+      if (isTransparent) {
+        result = await _stopTransparentProxyWithRoot();
       } else {
-        debugPrint("---- ProxyListHome stopVpn fail");
+        result = await platform.invokeMethod('stopVpn');
       }
-    } on PlatformException catch (e) {
-      debugPrint("Failed to stop proxy: '${e.message}'.");
+      if (result) {
+        debugPrint("---- ProxyListHome stopProxy success");
+      } else {
+        debugPrint("---- ProxyListHome stopProxy fail");
+      }
+    } catch (e) {
+      debugPrint("Failed to stop proxy: $e");
     }
+  }
+
+  // 透明代理：执行root iptables命令启动
+  Future<bool> _startTransparentProxyWithRoot(
+      Map<String, dynamic> proxyData) async {
+    try {
+      // 1. 获取目标端口
+      final String port = proxyData['proxyPort']?.toString() ?? '8080';
+      final List<int> uids =
+          List<int>.from(proxyData['appProxyPackageList'] ?? []);
+      final String proxyType = proxyData['proxyType']?.toString() ?? 'http';
+      final String proxyHost =
+          proxyData['proxyHost']?.toString() ?? '127.0.0.1';
+      final int proxyPort =
+          int.tryParse(proxyData['proxyPort']?.toString() ?? '') ?? 8080;
+      final String user = proxyData['proxyUser']?.toString() ?? '';
+      final String password = proxyData['proxyPass']?.toString() ?? '';
+      final String auth =
+          (user.isNotEmpty || password.isNotEmpty) ? 'true' : 'false';
+
+      final service = AppProxyRedsocksService();
+      final ok = await service.startProxyForUids(
+        uids,
+        proxyHost: proxyHost,
+        proxyPort: proxyPort,
+        proxyType: proxyType,
+        user: user,
+        password: password,
+        auth: auth,
+      );
+      return ok;
+    } catch (e) {
+      debugPrint('startProxyForUids error: $e');
+    }
+    return false;
+  }
+
+  // 透明代理：执行root iptables命令关闭
+  Future<bool> _stopTransparentProxyWithRoot() async {
+    try {
+      final service = AppProxyRedsocksService();
+      return await service.stopProxy();
+    } catch (e) {
+      debugPrint('stopProxy error: $e');
+    }
+    return false;
   }
 
   @override
@@ -230,11 +298,13 @@ class _ProxyListHomeState extends State<ProxyListHome> {
             child: GestureDetector(
                 child: SwitchListTile(
                   // 设置选中状态
-                  value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
+                  value: _isSelectedProxyName == c_data["proxyName"]
+                      ? true
+                      : false,
                   // 设置标题和副标题
                   title: Text('${c_data["proxyName"]}'),
-                  subtitle:
-                      Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
+                  subtitle: Text(
+                      '${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
                   // 设置switch的onChanged事件
                   onChanged: (bool value) {
                     setState(() {
@@ -243,7 +313,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                       } else {
                         _stopProxy();
                       }
-                      debugPrint("current index:$c_index select: $_isSelectedProxyName");
+                      debugPrint(
+                          "current index:$c_index select: $_isSelectedProxyName");
                     });
                   },
                 ),
@@ -254,8 +325,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                 },
                 // 设置双击事件
                 onDoubleTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
-                    return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (BuildContext context) {
+                    return AddProxyWidget(
+                        onDataFetched: handleConfigData, onData: c_data);
                   }));
                 }),
           );
@@ -284,8 +357,8 @@ class AddProxyButton extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) =>
-                    AddProxyWidget(onDataFetched: onDataFetched, onData: const {})),
+                builder: (context) => AddProxyWidget(
+                    onDataFetched: onDataFetched, onData: const {})),
           );
         },
         child: Container(
@@ -332,7 +405,8 @@ class AddProxyButton extends StatelessWidget {
                     // 添加文本组件，显示“添加代理”文本
                     Text(
                       S.of(context).text_add_proxy,
-                      style: const TextStyle(fontSize: 16.0, color: Colors.white),
+                      style:
+                          const TextStyle(fontSize: 16.0, color: Colors.white),
                     ),
                     const SizedBox(width: 5.0),
                   ],

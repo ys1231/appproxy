@@ -1,3 +1,4 @@
+import 'package:appproxy/data/app_proxy_redsocks_service.dart';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/events/theme_bloc.dart';
 import 'package:appproxy/ui/app_update.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:version/version.dart';
+import 'dart:io';
 
 import '../generated/l10n.dart';
 
@@ -24,6 +26,7 @@ class _AppSettingsState extends State<AppSettings> {
   bool _isCheckUpdate = true;
   bool _isCheckWifi = true;
   bool _isEnableDarkMode = false;
+  bool _isTransparentProxy = false;
 
   void initDeviceInfo() async {
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
@@ -34,6 +37,7 @@ class _AppSettingsState extends State<AppSettings> {
     _isCheckUpdate = await AppSetings.getCheckUpdate();
     _isCheckWifi = await AppSetings.getCheckWifi();
     _isEnableDarkMode = await AppSetings.getEnableDarkMode();
+    _isTransparentProxy = await AppSetings.getTransparentProxy();
     _version = packageInfo.version;
     if (_isCheckUpdate) {
       showUpdateDialog(context, _version, _arch);
@@ -47,9 +51,22 @@ class _AppSettingsState extends State<AppSettings> {
     initDeviceInfo();
   }
 
+  Future<bool> _checkRoot() async {
+    try {
+      final result = await Process.run('su', ['-c', 'id']);
+      if (result.exitCode == 0 && result.stdout.toString().contains('uid=0')) {
+        return true;
+      }
+    } catch (e) {
+      // ignore
+      debugPrint('Error checking root: $e');
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isEnableDarkMode){
+    if (_isEnableDarkMode) {
       context.read<ThemeBloc>().add(SetThemeEvent(ThemeMode.dark));
     }
     return Scaffold(
@@ -80,7 +97,8 @@ class _AppSettingsState extends State<AppSettings> {
                     Switch(
                         value: _isCheckUpdate,
                         onChanged: (bool newValue) {
-                          debugPrint('${S.of(context).text_check_update}:$newValue');
+                          debugPrint(
+                              '${S.of(context).text_check_update}:$newValue');
                           setState(() {
                             _isCheckUpdate = newValue;
                             AppSetings.setCheckUpdate(newValue);
@@ -101,7 +119,8 @@ class _AppSettingsState extends State<AppSettings> {
           Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.only(left: 10.0, top: 10.0),
-            child: Text(S.of(context).text_theme, style: const TextStyle(color: Colors.lightBlue)),
+            child: Text(S.of(context).text_theme,
+                style: const TextStyle(color: Colors.lightBlue)),
           ),
           GestureDetector(
               child: Card(
@@ -120,7 +139,8 @@ class _AppSettingsState extends State<AppSettings> {
                             S.of(context).text_default_follow_the_system,
                             style: TextStyle(
                                 color: (_isEnableDarkMode ||
-                                        MediaQuery.of(context).platformBrightness ==
+                                        MediaQuery.of(context)
+                                                .platformBrightness ==
                                             Brightness.dark)
                                     ? Colors.white54
                                     : Colors.black26),
@@ -135,9 +155,13 @@ class _AppSettingsState extends State<AppSettings> {
                                 debugPrint('isEnableDarkMode:$newValue');
                                 AppSetings.setEnableDarkMode(newValue);
                                 if (_isEnableDarkMode) {
-                                  context.read<ThemeBloc>().add(SetThemeEvent(ThemeMode.dark));
+                                  context
+                                      .read<ThemeBloc>()
+                                      .add(SetThemeEvent(ThemeMode.dark));
                                 } else {
-                                  context.read<ThemeBloc>().add(SetThemeEvent(ThemeMode.system));
+                                  context
+                                      .read<ThemeBloc>()
+                                      .add(SetThemeEvent(ThemeMode.system));
                                 }
                               });
                             })
@@ -177,7 +201,67 @@ class _AppSettingsState extends State<AppSettings> {
           Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.only(left: 10.0, top: 10.0),
-            child: Text(S.of(context).text_about, style: const TextStyle(color: Colors.lightBlue)),
+            child:
+                Text('透明代理', style: const TextStyle(color: Colors.lightBlue)),
+          ),
+          GestureDetector(
+            child: Card(
+              child: Container(
+                padding: const EdgeInsets.only(left: 10.0),
+                width: MediaQuery.of(context).size.width,
+                height: 50.0,
+                child: Row(
+                  children: [
+                    Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('是否开启透明代理')),
+                    const Spacer(),
+                    Switch(
+                        value: _isTransparentProxy,
+                        onChanged: (bool newValue) async {
+                          if (newValue) {
+                            bool hasRoot = await _checkRoot();
+                            if (!hasRoot) {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('权限不足'),
+                                  content:
+                                      const Text('开启透明代理需要root权限，请获取root后重试。'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(),
+                                      child: const Text('确定'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              return;
+                            }
+                            // 初始化二进制文件
+                            try {
+                              final service = AppProxyRedsocksService();
+                              await service.initBinaries();
+                            } catch (e) {
+                              debugPrint('initBinaries error: $e');
+                            }
+                          }
+                          setState(() {
+                            _isTransparentProxy = newValue;
+                            AppSetings.setTransparentProxy(newValue);
+                          });
+                        })
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 10.0, top: 10.0),
+            child: Text(S.of(context).text_about,
+                style: const TextStyle(color: Colors.lightBlue)),
           ),
           // const SizedBox(height: 10.0),
           GestureDetector(
@@ -233,8 +317,9 @@ void showUpdateDialog(BuildContext context, String version, String arch,
     {url = '', retryCount = 0}) async {
   int maxRetry = 2; // 最大重试次数
   // 获取版本信息
-  String appproxyUpdateUrl =
-      url != "" ? url : "https://pfile.ys1231.cn/modules/appproxy/appproxy.json";
+  String appproxyUpdateUrl = url != ""
+      ? url
+      : "https://pfile.ys1231.cn/modules/appproxy/appproxy.json";
   // 使用dio获取版本信息
   String versionName = "0";
   String modifyContent = "";
@@ -263,13 +348,15 @@ void showUpdateDialog(BuildContext context, String version, String arch,
   } catch (e) {
     if (retryCount < maxRetry) {
       retryCount++;
-      appproxyUpdateUrl = "https://api.github.com/repos/ys1231/appproxy/releases/latest";
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(S.of(context).text_get_version_info_fail)));
-      showUpdateDialog(context, version, arch, url: appproxyUpdateUrl, retryCount: retryCount);
+      appproxyUpdateUrl =
+          "https://api.github.com/repos/ys1231/appproxy/releases/latest";
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).text_get_version_info_fail)));
+      showUpdateDialog(context, version, arch,
+          url: appproxyUpdateUrl, retryCount: retryCount);
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(S.of(context).text_get_version_info_check_networ)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(S.of(context).text_get_version_info_check_networ)));
       return;
     }
   }
@@ -280,9 +367,10 @@ void showUpdateDialog(BuildContext context, String version, String arch,
     if (versionName == "0") {
       return;
     }
-    debugPrint('${S.of(context).text_current_latest},current:$version,new:$versionName');
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(S.of(context).text_current_latest)));
+    debugPrint(
+        '${S.of(context).text_current_latest},current:$version,new:$versionName');
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).text_current_latest)));
     return;
   }
   // 显示更新对话框

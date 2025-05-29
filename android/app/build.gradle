@@ -29,12 +29,12 @@ if (keystore == null){
 
 def fndkVersion = localProperties.getProperty('flutter.ndkVersion')
 if (fndkVersion == null){
-    return "29.0.13113456"
+    fndkVersion = "29.0.13113456"
 }
 
 android {
     namespace "cn.ys1231.appproxy"
-    compileSdk flutter.compileSdkVersion
+    compileSdkVersion 34
     ndkVersion fndkVersion
 
     compileOptions {
@@ -54,15 +54,18 @@ android {
         applicationId "cn.ys1231.appproxy"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdkVersion flutter.minSdkVersion
-        targetSdkVersion flutter.targetSdkVersion
+        minSdkVersion 21
+        targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
 
     signingConfigs {
         debug {
-
+            keyAlias System.getenv("KEY_ALIAS")
+            keyPassword System.getenv("KEY_PASSWORD")
+            storeFile file(keystore)
+            storePassword System.getenv("KEYSTORE_PASSWORD")
         }
         release {
             keyAlias System.getenv("KEY_ALIAS")

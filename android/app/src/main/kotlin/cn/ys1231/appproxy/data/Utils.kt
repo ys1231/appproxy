@@ -67,6 +67,9 @@ class Utils(private val context: Context) {
             // 获取并添加应用是否为系统应用的信息
             appInfoMap["isSystemApp"] = info.isSystemApp
 
+            // 获取并添加应用的UID
+            appInfoMap["uid"] = info.applicationInfo!!.uid
+            
             // 获取应用的图标，并将其转换为Base64编码的字符串
             val iconDrawable = pm.getApplicationIcon(info.packageName)
 
