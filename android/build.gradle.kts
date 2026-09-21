@@ -1,5 +1,10 @@
 allprojects {
     repositories {
+        // 国内镜像优先，官方源兜底（直连 Maven Central 可能 403）
+        maven("https://maven.aliyun.com/repository/google")
+        maven("https://maven.aliyun.com/repository/central")
+        maven("https://maven.aliyun.com/repository/public")
+        maven("https://mirrors.huaweicloud.com/repository/maven/")
         google()
         mavenCentral()
     }

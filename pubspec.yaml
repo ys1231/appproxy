@@ -48,7 +48,7 @@ dependencies:
   pinyin: ^3.3.0
   flutter_markdown: ^0.7.3+1
   markdown: ^7.2.2
-  connectivity_plus: ^6.1.4
+  connectivity_plus: ^7.3.1
   app_settings: ^9.0.0
   flutter_bloc: ^9.1.0
   intl_utils: ^2.8.13
@@ -62,7 +62,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
