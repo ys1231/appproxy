@@ -1,11 +1,12 @@
-import 'package:appproxy/events/language_bloc.dart';
+import 'package:appproxy/events/language/language_bloc.dart';
+import 'package:appproxy/events/restore/restore_cubit.dart';
 import 'package:appproxy/ui/app_config_list.dart';
 import 'package:appproxy/ui/proxy_config_list.dart';
 import 'package:appproxy/ui/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'events/theme_bloc.dart';
+import 'events/theme/theme_bloc.dart';
 import 'generated/l10n.dart';
 
 
@@ -17,6 +18,7 @@ void main() {
     BlocProvider<LanguageBloc>(
       create: (context) => LanguageBloc(),
     ),
+    BlocProvider<RestoreCubit>(create: (context) => RestoreCubit())
   ], child: const MyApp()));
 }
 

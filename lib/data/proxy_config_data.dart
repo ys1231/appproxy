@@ -81,4 +81,25 @@ class ProxyConfigData {
     }
   }
 
+  Future<Uint8List> toBytes() async{
+    final file = await _localFile;
+    try{
+      return file.readAsBytesSync();
+    }catch(e){
+      debugPrint(e.toString());
+      return Uint8List(0);
+    }
+  }
+
+  Future<bool> fromBytes(Uint8List bytes) async{
+    final file = await _localFile;
+    try{
+      file.writeAsBytesSync(bytes);
+      return true;
+    }catch(e){
+      debugPrint(e.toString());
+      return false;
+    }
+  }
+
 }

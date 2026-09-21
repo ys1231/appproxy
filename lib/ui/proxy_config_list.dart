@@ -5,10 +5,12 @@ import 'package:app_settings/app_settings.dart';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/data/proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
+import 'package:appproxy/events/restore/restore_cubit.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../generated/l10n.dart';
 import 'addproxy.dart';
@@ -211,55 +213,63 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         title: Text('Server ${S.of(context).text_server_config}'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
-      body: ListView.separated(
-        // 创建从边缘反弹的滚动物理效果
-        physics: const BouncingScrollPhysics(),
-        // 设置底部内边距 解决底部按钮遮挡问题
-        padding: const EdgeInsets.only(bottom: 70.0),
-        // 配置列表个数
-        itemCount: _dataLists.length,
-        // 设置分隔符零尺寸
-        separatorBuilder: (BuildContext context, int index) {
-          return const SizedBox.shrink();
+      body: BlocConsumer<RestoreCubit, int>(
+        listener: (BuildContext context, int state) {
+          _iscalled = false;
+          initProxyConfig();
         },
-        itemBuilder: (BuildContext context, int c_index) {
-          Map<String, dynamic> c_data = _dataLists[c_index];
-          return Card(
-            // 设置 margin 为水平方向 8.0，垂直方向 4.0
-            margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: GestureDetector(
-                child: SwitchListTile(
-                  // 设置选中状态
-                  value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
-                  // 设置标题和副标题
-                  title: Text('${c_data["proxyName"]}'),
-                  subtitle:
+        builder: (context, state) {
+          return ListView.separated(
+            // 创建从边缘反弹的滚动物理效果
+            physics: const BouncingScrollPhysics(),
+            // 设置底部内边距 解决底部按钮遮挡问题
+            padding: const EdgeInsets.only(bottom: 70.0),
+            // 配置列表个数
+            itemCount: _dataLists.length,
+            // 设置分隔符零尺寸
+            separatorBuilder: (BuildContext context, int index) {
+              return const SizedBox.shrink();
+            },
+            itemBuilder: (BuildContext context, int c_index) {
+              Map<String, dynamic> c_data = _dataLists[c_index];
+              return Card(
+                // 设置 margin 为水平方向 8.0，垂直方向 4.0
+                margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                child: GestureDetector(
+                    child: SwitchListTile(
+                      // 设置选中状态
+                      value: _isSelectedProxyName == c_data["proxyName"] ? true : false,
+                      // 设置标题和副标题
+                      title: Text('${c_data["proxyName"]}'),
+                      subtitle:
                       Text('${c_data["proxyType"]} ${c_data["proxyHost"]}:${c_data["proxyPort"]}'),
-                  // 设置switch的onChanged事件
-                  onChanged: (bool value) {
-                    setState(() {
-                      if (value) {
-                        _startProxy(c_data);
-                      } else {
-                        _stopProxy();
-                      }
-                      debugPrint("current index:$c_index select: $_isSelectedProxyName");
-                    });
-                  },
-                ),
-                // 设置长按事件 主要触发删除操作
-                onLongPress: () {
-                  debugPrint("long press delete:${c_data["proxyName"]}");
-                  _showDeleteDialog(context, c_data);
-                },
-                // 设置双击事件
-                onDoubleTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
-                    return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
-                  }));
-                }),
+                      // 设置switch的onChanged事件
+                      onChanged: (bool value) {
+                        setState(() {
+                          if (value) {
+                            _startProxy(c_data);
+                          } else {
+                            _stopProxy();
+                          }
+                          debugPrint("current index:$c_index select: $_isSelectedProxyName");
+                        });
+                      },
+                    ),
+                    // 设置长按事件 主要触发删除操作
+                    onLongPress: () {
+                      debugPrint("long press delete:${c_data["proxyName"]}");
+                      _showDeleteDialog(context, c_data);
+                    },
+                    // 设置双击事件
+                    onDoubleTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
+                        return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
+                      }));
+                    }),
+              );
+            },
           );
-        },
+        }
       ),
       floatingActionButton: AddProxyButton(onDataFetched: handleConfigData),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

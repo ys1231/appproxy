@@ -52,6 +52,7 @@ dependencies:
   app_settings: ^9.0.0
   flutter_bloc: ^9.1.0
   intl_utils: ^2.8.13
+  file_picker: ^13.1.0
 
 dev_dependencies:
   flutter_test:
