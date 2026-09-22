@@ -64,6 +64,9 @@
 - [MCP](https://github.com/modelcontextprotocol/kotlin-sdk/tree/main/samples/simple-streamable-server) 参考项目
 # 开发
 
+## 继续开发
+- 请基于 `iyue` 创建分支开发
+
 ## build tun2socks
 
 ```shell
