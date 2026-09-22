@@ -50,5 +50,12 @@
   "mcp_port": "MCP Port",
   "mcp_auth": "MCP Password",
   "ok": "OK",
-  "text_modify_config": "Modify Configuration"
+  "text_modify_config": "Modify Configuration",
+  "text_backuprestore": "Backup & Restore",
+  "overwrite_existing_config": "Overwrites existing config",
+  "text_backup": "Backup",
+  "backup_failed": "Backup failed, configuration is empty",
+  "text_restore": "Restore",
+  "restore_success": "Restore successful",
+  "restore_failed": "Restore failed"
 }

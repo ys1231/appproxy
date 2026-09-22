@@ -357,7 +357,7 @@ class _AppSettingsState extends State<AppSettings> {
             Container(
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.only(left: 10.0, top: 10.0),
-              child: Text("备份&还原", style: const TextStyle(color: Colors.lightBlue)),
+              child: Text(S.of(context).text_backuprestore, style: const TextStyle(color: Colors.lightBlue)),
             ),
             Card(
               child: Container(
@@ -368,7 +368,7 @@ class _AppSettingsState extends State<AppSettings> {
                 height: 50.0,
                 child: Row(
                   children: [
-                    Align(alignment: Alignment.centerLeft, child: Text("会覆盖现有配置")),
+                    Align(alignment: Alignment.centerLeft, child: Text(S.of(context).overwrite_existing_config)),
                     // Expanded 让"备份"按钮占据剩余宽度的一半，
                     // 图标与文字在按钮内水平居中，与设置列表风格保持一致
                     Expanded(
@@ -380,7 +380,7 @@ class _AppSettingsState extends State<AppSettings> {
                         ),
                         // 使用 outlined 风格图标，视觉上更轻量、更符合设置项样式
                         icon: const Icon(Icons.backup_outlined),
-                        label: const Text("备份"),
+                        label: Text(S.of(context).text_backup),
                         onPressed: () async {
                           // debugPrint("---- 备份------");
                           var fileName =
@@ -392,7 +392,7 @@ class _AppSettingsState extends State<AppSettings> {
                           }else{
                             debugPrint("备份失败, 配置文件为空");
                             ScaffoldMessenger.of(context)
-                                .showSnackBar(SnackBar(content: Text("备份失败, 配置文件为空")));
+                                .showSnackBar(SnackBar(content: Text(S.of(context).backup_failed)));
                           }
                         },
                       ),
@@ -408,26 +408,23 @@ class _AppSettingsState extends State<AppSettings> {
                           // foregroundColor: Theme.of(context).textTheme.bodyMedium?.color,
                         ),
                         icon: const Icon(Icons.restore_outlined),
-                        label: const Text("还原"),
+                        label: Text(S.of(context).text_restore),
                         onPressed: () async {
-                          debugPrint("---- 还原------");
                           PlatformFile? file = await FilePicker.pickFile(
-                              dialogTitle: "选择备份文件",
                               type: FileType.custom,
                               allowedExtensions: ['json']);
-                          debugPrint("选择的文件: ${file?.path ?? 'No file selected'}");
                           if (file != null) {
-                            debugPrint("选择的文件: ${file.path}");
                             // 还原配置文件
                             var state = await _proxyConfigData.fromBytes(await file.readAsBytes());
                             if (state) {
-                              debugPrint("还原成功");
                               if (!mounted) return;
                               context.read<RestoreCubit>().increment();
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(content: Text(S.of(context).restore_success)));
                             } else {
-                              debugPrint("还原失败");
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(content: Text(S.of(context).restore_failed)));
                             }
-                            debugPrint("还原成功");
                           } else {
                             debugPrint("还原失败, 未选择文件");
                           }

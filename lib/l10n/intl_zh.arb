@@ -50,5 +50,12 @@
   "mcp_port": "MCP 端口",
   "mcp_auth": "MCP 密码",
   "ok": "确认",
-  "text_modify_config": "修改配置"
+  "text_modify_config": "修改配置",
+  "text_backuprestore": "备份&还原",
+  "overwrite_existing_config": "会覆盖现有配置",
+  "text_backup": "备份",
+  "backup_failed": "备份失败, 配置文件为空",
+  "text_restore": "还原",
+  "restore_success": "还原成功",
+  "restore_failed": "还原失败"
 }
