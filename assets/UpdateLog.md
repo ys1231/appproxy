@@ -1,5 +1,21 @@
 
 ---
+- feat(restore): :sparkles: #34 添加代理配置备份与还原功能
+- 新增 RestoreCubit 管理还原状态，还原后自动刷新代理配置列表
+- ProxyConfigData 新增 toBytes/fromBytes 方法，支持配置文件读写
+- 设置页面新增备份/还原按钮，使用 file_picker 保存与读取配置文件
+- 备份失败、还原成功/失败均显示对应提示信息
+- 中英文国际化资源补充备份与还原相关文案
+- 事件目录按 language/theme/restore 模块拆分，规范代码结构
+- feat(ui): :sparkles: 根据操作切换代理配置页面标题
+- 添加代理时显示"添加代理"，修改配置时显示"修改配置"
+- fix(ui): :bug: 修正UI相关的问题和优化初始化数据逻辑
+- chore(android): :arrow_up: 优化仓库镜像与升级依赖版本
+- 构建脚本新增阿里云/华为云 Maven 镜像，解决 Maven Central 403 问题
+- connectivity_plus 升级至 7.3.1，flutter_lints 升级至 6.0.0
+- com.android.application 插件升级至 9.3.3
+- docs(readme): :memo: 更新开发章节，添加继续开发提示
+---
 - feat(appproxy): :sparkles: 应用安装/卸载时自动刷新配置列表
 - chore(deps): 升级依赖版本
 - device_info_plus 升级至 13.2.0
