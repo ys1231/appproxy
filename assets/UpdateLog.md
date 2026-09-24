@@ -1,4 +1,4 @@
-
+- feat(ebpf): :fire: 集成eBPF透明代理支持并新增相关管理功能
 ---
 - feat(restore): :sparkles: #34 添加代理配置备份与还原功能
 - 新增 RestoreCubit 管理还原状态，还原后自动刷新代理配置列表
