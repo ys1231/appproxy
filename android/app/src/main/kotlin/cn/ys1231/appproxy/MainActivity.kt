@@ -17,6 +17,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import cn.ys1231.appproxy.EbpfService.EbpfChannelHandler
 import cn.ys1231.appproxy.IyueService.IyueVPNService
 import cn.ys1231.appproxy.IyueService.VpnServiceController
 import cn.ys1231.appproxy.data.AppChangeReceiver
@@ -46,9 +47,12 @@ class MainActivity : FlutterActivity() {
     private var mcpServiceBinder: MCPForegroundService.MCPServiceBinder? = null
     private var mcpConn: ServiceConnection? = null
     private var isMcpBind: Boolean = false
+    // eBPF(sing-box) 引擎：与原 VPN 通道完全独立
+    private var ebpfChannelHandler: EbpfChannelHandler? = null
     // 使用 lateinit 延迟初始化
     private lateinit var receiver: AppChangeReceiver
 
+    /** 入口：绑定 VPN 服务与 MCP 前台服务、注册应用安装/卸载广播、检查 VPN 与通知权限 */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         intentVpnService = Intent(this, IyueVPNService::class.java)
@@ -107,6 +111,13 @@ class MainActivity : FlutterActivity() {
         registerReceiver(receiver, filter)
     }
 
+    /**
+     * 启动 tun2socks(VPN) 引擎：把配置交给绑定的 IyueVPNService（它负责建 TUN + 拉引擎）。
+     *
+     * 顺带起一个"看门"线程：每秒问一次 VPN 是否还在跑，一旦发现停了就通知 Flutter 把开关复位
+     *（用户可能是在系统的 VPN 设置里关掉、或系统回收了服务，UI 需要同步）。
+     * 这是**原 VPN 链路**的行为，eBPF 引擎走的是另一条通道（见 EbpfChannelHandler）。
+     */
     private fun startVpnService() {
         Log.d(TAG, "startVpnService: ${currentProxy.toString()}")
         iyueVpnService?.startVpnService(currentProxy!!)
@@ -129,11 +140,16 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
+    /** 停止 tun2socks(VPN) 引擎（关闭 TUN、停引擎，见 IyueVPNService.stopVpnService） */
     private fun stopVpnService() {
         Log.d(TAG, "stopVpnService: ...... ")
         iyueVpnService?.stopVpnService()
     }
 
+    /**
+     * 交给系统去下载 APK（不自己下载）：构造 ACTION_VIEW 让浏览器/下载器接管。
+     * Flutter 侧「发现新版本 → 下载」走的就是这里。
+     */
     private fun startDownload(url: String?) {
         val downloadIntent = Intent(Intent.ACTION_VIEW)
         downloadIntent.data = Uri.parse(url)
@@ -141,9 +157,17 @@ class MainActivity : FlutterActivity() {
         startActivity(downloadIntent)
     }
 
+    /** 注册全部 MethodChannel：应用列表、原 VPN 通道、更新下载、MCP、以及新的 eBPF 通道 */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         utils = Utils(this)
+
+        // eBPF(sing-box) 引擎通道：新通道，原 vpn 通道逻辑不动
+        ebpfChannelHandler = EbpfChannelHandler(this, this).also {
+            it.register(flutterEngine)
+            // 冷启动清孤儿（仅当上次会话标记为运行中时才真正执行 root 检查）
+            it.cleanupOrphanIfNeeded()
+        }
 
         FLUTTER_CHANNEL = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -259,6 +283,12 @@ class MainActivity : FlutterActivity() {
 
     private val VPN_REQUEST_CODE = 100
     private val REQUEST_NOTIFICATION_PERMISSION = 1231
+    /**
+     * 检查两类权限，缺哪个就弹哪个：
+     *   1. 通知权限（Android 13+）：前台服务要挂通知，没有通知权限会显示不出来
+     *   2. VPN 授权（VpnService.prepare）：返回非 null 说明用户还没同意过，需要拉起系统弹窗，
+     *      结果在 onActivityResult(VPN_REQUEST_CODE) 里回
+     */
     private fun checkVpnPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
@@ -283,6 +313,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** VPN 授权弹窗的回调：用户同意/拒绝（拒绝时目前只记日志） */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_REQUEST_CODE) {
@@ -297,6 +328,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** 通知权限回调：被拒时提示并引导到系统设置 */
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -315,6 +347,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * 跳到本应用的系统设置页，让用户手动打开通知（通知权限被拒时的引导）。
+     * 先试"应用通知设置"，失败再退到"应用详情页" —— 不同 ROM 支持的 action 不一样。
+     */
     private fun startNotificationSetting() {
         val applicationInfo = applicationInfo
         try {
@@ -334,6 +370,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** Activity 销毁：解绑两个服务、注销广播接收器（避免泄漏） */
     override fun onDestroy() {
         super.onDestroy()
         if (isBind) {

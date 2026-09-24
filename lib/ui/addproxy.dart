@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:appproxy/data/common.dart';
+import 'package:appproxy/data/ebpf_proxy_data.dart';
 import 'package:appproxy/events/debounce.dart';
 import 'package:appproxy/generated/l10n.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +13,7 @@ class AddProxyWidget extends StatefulWidget {
   final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
   Map<String, dynamic> onData = {};
 
+  /// 创建 State
   @override
   State<AddProxyWidget> createState() => _AddProxyWidgetState();
 }
@@ -46,6 +49,15 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
   // 默认title 添加代理配置 false 为修改
   var isDefaultTitle = true;
 
+  // ---- eBPF 透明代理（root）----
+  // 开关表示「本条配置是否走 sing-box(eBPF)」。开关状态**存在设置侧**（AppSetings.ebpfProfiles，
+  // 按配置名记录），不写进 proxyConfig.json —— 这样备份/恢复代理配置不会把引擎标记带到别的设备。
+  // 是否可点由本机检测结果（原生 support.json 缓存）决定：打开页面时读缓存，不跑 root 命令（秒开）。
+  bool _ebpfEnabled = false;
+  EbpfSupportStatus _ebpfSupport = const EbpfSupportStatus();
+  bool _ebpfSupportLoaded = false;
+
+  /// 初始化：编辑态回填已有配置；读取本机检测缓存（决定 eBPF 开关能否点）
   @override
   void initState() {
     super.initState();
@@ -61,14 +73,36 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
     }else{
       isDefaultTitle = true;
     }
+    _loadEbpfState();
   }
 
+  /// 读「本机检测结果（缓存）」+「本条配置的引擎标记（设置侧）」
+  Future<void> _loadEbpfState() async {
+    try {
+      final support = await EbpfProxyData.getSupportStatus();
+      final profiles = await AppSetings.getEbpfProfiles();
+      if (!mounted) return;
+      setState(() {
+        _ebpfSupport = support;
+        _ebpfEnabled = profiles.contains(widget.onData['proxyName']);
+        _ebpfSupportLoaded = true;
+      });
+    } catch (e) {
+      debugPrint("_loadEbpfState: $e");
+      if (mounted) {
+        setState(() => _ebpfSupportLoaded = true);
+      }
+    }
+  }
+
+  /// 释放：销毁输入防抖计时器
   @override
   void dispose() {
     super.dispose();
     _debounce.dispose();
   }
 
+  /// 构建表单：名称 → 类型 → 地址 → 端口 → 账号/密码 → eBPF 开关
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,7 +114,7 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
             IconButton(
               padding: const EdgeInsets.only(right: 20.0),
               icon: const Icon(Icons.save),
-              onPressed: () {
+              onPressed: () async {
                 proxyConfig['proxyName'] = _controller_proxyName.text;
                 proxyConfig['proxyType'] = _controller_proxyType.text;
                 proxyConfig['proxyHost'] = _controller_proxyHost.text;
@@ -95,6 +129,10 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 // 这俩可以为空
                 proxyConfig['proxyUser'] = _controller_proxyUser.text;
                 proxyConfig['proxyPass'] = _controller_proxyPass.text;
+                // 引擎标记存设置侧（不写入 proxyConfig.json，避免跟随备份/恢复）。
+                // 必须 await：列表页返回后会立刻读这个值刷新徽标，不 await 会读到旧值（竞态）。
+                await AppSetings.setEbpfProfile(_controller_proxyName.text, _ebpfEnabled);
+                if (!mounted) return;
                 if (widget.onData.isNotEmpty) {
                   widget.onDataFetched(proxyConfig, isAdd: true);
                 } else {
@@ -189,11 +227,76 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                       border: const OutlineInputBorder(),
                     ),
                   ),
+                  const SizedBox(height: 20.0),
+                  _buildEbpfSwitch(context),
                 ],
               ),
             )));
   }
 
+  /// eBPF 透明代理开关（root）。
+  ///
+  /// 行为约定：
+  ///  - 开关是否可点**只由本机检测结果**决定（原生 support.json 缓存，打开页面时读取，秒开）；
+  ///  - 开关状态存设置侧（AppSetings.ebpfProfiles，按配置名），不写进 proxyConfig.json，
+  ///    因此不会跟着代理配置的备份/恢复跑到别的设备上；
+  ///  - 检测按钮在「设置 → eBPF 透明代理」，这里只显示状态与原因。
+  Widget _buildEbpfSwitch(BuildContext context) {
+    final s = S.of(context);
+    final supported = _ebpfSupport.supported;
+    String status;
+    if (!_ebpfSupportLoaded) {
+      status = s.ebpf_status_loading;
+    } else if (!_ebpfSupport.root) {
+      status = s.ebpf_status_no_root;
+    } else if (_ebpfSupport.neverChecked) {
+      status = s.ebpf_status_never_checked;
+    } else if (supported) {
+      status = '${s.ebpf_status_supported} (${_ebpfSupport.cgroup ? "cgroup" : "tc"})';
+    } else {
+      final reasons = _ebpfSupport.reasons.take(2).join('; ');
+      status = reasons.isEmpty ? s.ebpf_status_unsupported : '${s.ebpf_status_unsupported}: $reasons';
+    }
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 50.0,
+            padding: const EdgeInsets.only(left: 10.0, right: 10.0),
+            child: Row(
+              children: [
+                Expanded(child: Text(s.ebpf_engine_title)),
+                Switch(
+                  value: _ebpfEnabled,
+                  // 只有检测通过才可点；不支持时置灰
+                  onChanged: supported
+                      ? (bool value) {
+                          setState(() {
+                            _ebpfEnabled = value;
+                          });
+                        }
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 10.0, right: 10.0, bottom: 10.0),
+            child: Text(
+              status,
+              style: TextStyle(
+                fontSize: 12.0,
+                color: supported ? Colors.green : Colors.orange,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 地址/端口变更后（防抖 1s）做一次 TCP 连通性探测，把结果弹给用户；不影响保存
   void checkConnect(context) async {
     final ip = _controller_proxyHost.text;
     final port = _controller_proxyPort.text;
@@ -218,6 +321,7 @@ class ProxyType extends StatefulWidget {
 
   final TextEditingController controller;
 
+  /// 创建 State
   @override
   State<ProxyType> createState() => _ProxyTypeState();
 }
@@ -235,12 +339,14 @@ class _ProxyTypeState extends State<ProxyType> {
   String defaultValue = 'socks5';
   proxyItem? selectedItem;
 
+  /// 下拉选择回调（值本身由 controller 提供，这里只需要触发重建）
   void onChanged(String? newValue) {
     setState(() {
       defaultValue = newValue!;
     });
   }
 
+  /// 构建表单：名称 → 类型 → 地址 → 端口 → 账号/密码 → eBPF 开关
   @override
   Widget build(BuildContext context) {
     return DropdownMenu<proxyItem>(

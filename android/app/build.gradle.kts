@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.ApplicationExtension
 import java.util.Properties
 
 plugins {
@@ -17,7 +18,7 @@ if (localPropertiesFile.exists()) {
 val keystorePath = localProperties.getProperty("flutter.keystore")
     ?: throw GradleException("flutter.keystore is not set in local.properties")
 
-android {
+extensions.configure<ApplicationExtension> {
     namespace = "cn.ys1231.appproxy"
     compileSdk = 36  // Flutter 插件要求至少 36
     ndkVersion = flutter.ndkVersion
@@ -86,6 +87,12 @@ android {
             excludes += "META-INF/DEPENDENCIES"
             excludes += "META-INF/LICENSE"
             excludes += "META-INF/LICENSE.txt"
+            // netty-codec-native-quic 的 5 个平台 jar 各带一份完全相同的 license 文本
+            excludes += "META-INF/license/**"
+            // 同上来源的元数据，Android 上无用途
+            excludes += "META-INF/native-image/**"
+            excludes += "META-INF/maven/**"
+            excludes += "META-INF/versions/**/module-info.class"
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/NOTICE.txt"
         }
@@ -105,6 +112,8 @@ flutter {
 
 dependencies {
     implementation(files("libs/tun2socks.aar"))
+    // root shell：eBPF(sing-box) 模式用，tun2socks 路径不使用
+    implementation("com.github.topjohnwu.libsu:core:6.0.0")
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("io.ktor:ktor-server-cors:3.4.2")
     implementation("io.ktor:ktor-server-netty:3.4.2")

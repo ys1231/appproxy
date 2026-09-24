@@ -12,6 +12,7 @@ import 'package:pinyin/pinyin.dart';
 class AppConfigList extends StatefulWidget {
   const AppConfigList({super.key});
 
+  /// 创建 State
   @override
   State<AppConfigList> createState() => AppConfigState();
 }
@@ -132,6 +133,7 @@ class AppConfigState extends State<AppConfigList> {
     }
   }
 
+  /// 初始化：注册原生"应用列表已刷新"回调 + 载入已保存的分应用勾选
   @override
   void initState() {
     super.initState();
@@ -158,6 +160,7 @@ class AppConfigState extends State<AppConfigList> {
     });
   }
 
+  /// 切换"是否显示系统应用"（只影响展示与计数，不改勾选）
   void updateShowSystemApp(isShowSystemApp) {
     _isShowSystemApp = isShowSystemApp;
     setState(() {
@@ -167,6 +170,7 @@ class AppConfigState extends State<AppConfigList> {
     });
   }
 
+  /// 全选/全不选：批量更新勾选并把包名集合同步到全局 appProxyPackageList
   void updateSelectAll(isSelectAll) {
     setState(() {
       debugPrint("updateSelectAll:$isSelectAll");
@@ -246,6 +250,7 @@ class AppConfigState extends State<AppConfigList> {
     }
   }
 
+  /// 按关键字过滤列表（匹配应用名或包名）
   void _searchApp(String searchText) {
     _searchAppListInfo.clear();
 
@@ -268,6 +273,7 @@ class AppConfigState extends State<AppConfigList> {
     setState(() {});
   }
 
+  /// 退出搜索：清空关键字、恢复完整列表
   void exitSearch() {
     setState(() {
       debugPrint("exitSearch");
@@ -276,6 +282,7 @@ class AppConfigState extends State<AppConfigList> {
     });
   }
 
+  /// 构建应用列表（顶部搜索/过滤栏 + 应用卡片列表）
   @override
   Widget build(BuildContext context) {
     /**
@@ -476,6 +483,7 @@ class CardCheckbox extends StatefulWidget {
   Function(bool) callbackOnChanged;
   bool isSelected;
 
+  /// 创建 State
   @override
   State<StatefulWidget> createState() => CardCheckboxState();
 }
@@ -491,6 +499,7 @@ class CardCheckboxState extends State<CardCheckbox> {
     });
   }
 
+  /// 构建应用列表（顶部搜索/过滤栏 + 应用卡片列表）
   @override
   Widget build(BuildContext context) {
     return Checkbox(

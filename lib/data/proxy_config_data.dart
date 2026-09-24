@@ -17,6 +17,7 @@ class ProxyConfigData {
     return File('$path/proxyConfig.json');
   }
 
+  /// 整表写回代理配置（新增/修改/删除后都调它，覆盖写 proxyConfig.json）
   Future<void> addProxyConfig(List<Map<String, dynamic>>  data) async {
     final file = await _localFile;
     // Write the file
@@ -38,6 +39,7 @@ class ProxyConfigData {
     return ;
   }
 
+  /// 整表写回代理配置（删除场景，与 addProxyConfig 同为覆盖写）
   Future<void> deleteProxyConfig(List<Map<String, dynamic>>  data) async {
     final file = await _localFile;
     // Write the file
@@ -81,6 +83,7 @@ class ProxyConfigData {
     }
   }
 
+  /// 把配置文件读成字节（备份用，交给系统"保存文件"对话框写出）
   Future<Uint8List> toBytes() async{
     final file = await _localFile;
     try{
@@ -91,6 +94,7 @@ class ProxyConfigData {
     }
   }
 
+  /// 用备份文件的内容覆盖本地配置（还原用）
   Future<bool> fromBytes(Uint8List bytes) async{
     final file = await _localFile;
     try{

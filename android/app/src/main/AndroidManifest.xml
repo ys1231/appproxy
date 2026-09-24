@@ -41,6 +41,15 @@
                 android:value="other" />
         </service>
         <service
+            android:name=".EbpfService.EbpfProxyService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="ebpf proxy" />
+        </service>
+        <service
             android:name=".IyueService.IyueVPNService"
             android:enabled="true"
             android:exported="true"

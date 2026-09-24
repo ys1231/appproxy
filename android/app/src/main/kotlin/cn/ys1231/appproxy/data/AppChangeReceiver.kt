@@ -7,6 +7,7 @@ import android.util.Log
 
 class AppChangeReceiver(private val onAppChanged: (String?) -> Unit) : BroadcastReceiver() {
     private val TAG = "iyue->${this.javaClass.simpleName} "
+    /** 收到应用安装/卸载/更新广播：回调宿主（MainActivity）通知 Flutter 刷新应用列表 */
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
         // 获取发生变化的包名

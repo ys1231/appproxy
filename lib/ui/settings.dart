@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/events/theme/theme_bloc.dart';
 import 'package:appproxy/ui/app_update.dart';
+import 'package:appproxy/ui/ebpf_settings.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ import '../generated/l10n.dart';
 class AppSettings extends StatefulWidget {
   const AppSettings({super.key});
 
+  /// 创建 State
   @override
   State<AppSettings> createState() => _AppSettingsState();
 }
@@ -40,6 +42,7 @@ class _AppSettingsState extends State<AppSettings> {
   late var sMsg;
   final ProxyConfigData _proxyConfigData = ProxyConfigData();
 
+  /// 初始化设置页：读取各项设置与设备信息、把 MCP 配置推给原生、按开关拉起 MCP 服务、必要时弹更新
   void initDeviceInfo() async {
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
@@ -64,12 +67,14 @@ class _AppSettingsState extends State<AppSettings> {
     setState(() {});
   }
 
+  /// 初始化
   @override
   void initState() {
     super.initState();
     initDeviceInfo();
   }
 
+  /// 构建设置页：主题/语言/MCP/更新/Wi-Fi/eBPF/备份还原/关于 各分区自上而下排列
   @override
   Widget build(BuildContext context) {
     if (_isEnableDarkMode) {
@@ -354,6 +359,37 @@ class _AppSettingsState extends State<AppSettings> {
                 });
               },
             ),
+            // eBPF(sing-box) 透明代理：设置页只放入口，具体配置在独立页面。
+            // 行高与其它设置项保持一致（50），所以这里不放副标题
+            Container(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.only(left: 10.0, top: 10.0),
+              child: Text(S.of(context).ebpf_section_title, style: const TextStyle(color: Colors.lightBlue)),
+            ),
+            GestureDetector(
+              child: Card(
+                child: Container(
+                  padding: const EdgeInsets.only(left: 10.0, right: 10.0),
+                  width: MediaQuery.of(context).size.width,
+                  height: 50.0,
+                  child: Row(
+                    children: [
+                      Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(S.of(context).ebpf_entry_label)),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                ),
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EbpfSettingsPage()),
+                );
+              },
+            ),
             Container(
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.only(left: 10.0, top: 10.0),
@@ -482,6 +518,7 @@ class _AppSettingsState extends State<AppSettings> {
       ),
     );
   }
+
 }
 
 Future<void> _launchUrl(_url) async {

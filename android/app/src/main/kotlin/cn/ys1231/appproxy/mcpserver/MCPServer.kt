@@ -1,7 +1,9 @@
 package cn.ys1231.appproxy.mcpserver
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.VpnService
+import cn.ys1231.appproxy.EbpfService.EbpfProxyController
 import cn.ys1231.appproxy.IyueService.VpnServiceController
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
@@ -54,6 +56,29 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
 
+/**
+ * MCP 服务端（单例）。
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 【它是干什么的】
+ * 用 Ktor + MCP Kotlin SDK 起一个 HTTP 服务（默认 `0.0.0.0:12345/mcp`，Bearer 鉴权），
+ * 把外部 MCP 客户端（Claude 等）的工具调用转成对本机代理引擎的操作：
+ *
+ *     MCP 客户端 ──HTTP/JSON-RPC──> 本类注册的 tools/list、tools/call
+ *                                    ├─ tun2socks 引擎 → VpnServiceController → IyueVPNService
+ *                                    └─ eBPF 引擎      → EbpfProxyController  → EbpfProxyManager(root 起 sing-box)
+ *
+ * 「引擎」由调用方通过 `proxyEngine` 参数选择（默认 tun2socks）；两个引擎互斥，
+ * 同一时刻只会有一个在跑（见 anyEngineRunning）。
+ *
+ * 【两个容易踩的点】
+ *   1. `startMcpServer()` / `stopMcpServer()` 是**进程内启停**：Ktor 的绑定是异步的，
+ *      旧实现既不校验绑定结果、也不等旧实例释放，导致"显示已启动却连不上"（详见 fix(mcp) 那个提交）。
+ *      改动这里要连带验证：关→开循环、改端口、划掉任务卡片后再打开。
+ *   2. 工具回调里若做耗时/root 操作（eBPF 的 getStatus 会跑 `kill -0`），
+ *      注意它会占住 Ktor 的请求线程。
+ * ─────────────────────────────────────────────────────────────────────────
+ */
 class MCPServer private constructor(
     val context: Context,
 ) {
@@ -61,6 +86,7 @@ class MCPServer private constructor(
         @Volatile
         private var instance: MCPServer? = null
 
+        /** 取单例（双检锁）：全局只有一份服务端状态（鉴权 token、端口、nettyServer） */
         fun getInstance(context: Context): MCPServer {
             return instance ?: synchronized(this) {
                 instance ?: MCPServer(context).also {
@@ -69,6 +95,7 @@ class MCPServer private constructor(
             }
         }
 
+        /** 丢弃单例：先停服务再置空，避免留下还在监听的旧实例 */
         fun resetInstance() {
             instance?.stopMcpServer()
             instance = null
@@ -76,8 +103,28 @@ class MCPServer private constructor(
     }
 
     private val TAG = "iyue->${this.javaClass.simpleName}"
+
+    /** tun2socks(VPN) 引擎的入口，由 MainActivity 在绑定 IyueVPNService 成功后注入 */
     private var vpnController: VpnServiceController? = null
+
+    /**
+     * eBPF(sing-box) 引擎控制器。
+     * 工具调用里传 `proxyEngine = "ebpf"` 时走它；不传/传 tun2socks 时行为与原来完全一致。
+     */
+    private val ebpfController: EbpfProxyController by lazy { EbpfProxyController(context) }
+
+    /** 当前是否有引擎在运行（两个引擎互斥，用于「已在运行」判断） */
+    private fun anyEngineRunning(): Boolean {
+        // 两个引擎各自探测，任何一个抛异常都当作"没在跑"，不影响另一个的判断
+        val vpn = try { vpnController?.getVpnStatus() == true } catch (e: Exception) { false }
+        val ebpf = try { ebpfController.getStatus() } catch (e: Exception) { false }
+        return vpn || ebpf
+    }
+
+    /** MCP 会话头：客户端在 initialize 之后，后续请求都要带上它 */
     private val MCP_SESSION_ID_HEADER = "mcp-session-id"
+
+    /** 鉴权 token（Bearer）。用 getter/setter 只为在变更时打日志，便于排查客户端 401 */
     private var _authToken: String = ""
     private var authToken: String
         get() = _authToken
@@ -85,6 +132,8 @@ class MCPServer private constructor(
             _authToken = value
             Log.d(TAG, "MCP auth token changed to $value")
         }
+
+    /** 监听端口（默认 12345）。同上，setter 打日志 */
     private var _mcpPort: Int = 0
     private var mcpPort: Int
         get() = _mcpPort
@@ -93,6 +142,7 @@ class MCPServer private constructor(
             Log.d(TAG, "MCP server port changed to $value")
         }
 
+    /** 注入 VPN 引擎控制器（MainActivity 在服务连接成功后调用） */
     fun setVpnController(vpnController: VpnServiceController?) {
         this.vpnController = vpnController
         Log.d(TAG, "setVpnController: ${vpnController.toString()}")
@@ -100,6 +150,13 @@ class MCPServer private constructor(
 
     private var nettyServer: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
 
+    /**
+     * 启动 MCP 服务（进程内启停，注意开头类注释里的两个坑）。
+     *
+     * 绑定是**异步**的（`start(wait=false)` 立刻返回，真正的 bind 在后台完成），
+     * 所以这里的日志只代表"已发起启动"，不代表端口已经可连 —— 调用方要判断可用性，
+     * 应实际发一个请求（见 fix(mcp) 提交里讨论过的自检思路）。
+     */
     fun startMcpServer() {
         nettyServer = embeddedServer(Netty, host = "0.0.0.0", port = mcpPort) {
             configureServer()
@@ -108,14 +165,16 @@ class MCPServer private constructor(
         Log.d(TAG, "MCP server started on port $mcpPort")
     }
 
+    /** 停止 MCP 服务：先停引擎再置空引用（幂等，未启动时调用也安全） */
     fun stopMcpServer() {
-        if (nettyServer != null){
+        if (nettyServer != null) {
             nettyServer?.stop()
         }
         Log.d(TAG, "MCP server stopped")
         nettyServer = null
     }
 
+    /** 改端口：仅当端口真的变了、且服务在跑时才重启（端口没变就不要白白抖一次） */
     fun updateMcpPort(port: Int?) {
         if (port != null && port != mcpPort) {
             mcpPort = port
@@ -127,6 +186,7 @@ class MCPServer private constructor(
         }
     }
 
+    /** 改鉴权 token：同 updateMcpPort，仅在值变化且服务在跑时重启（否则老客户端会 401） */
     fun updateMcpAuth(auth: String?) {
         if (auth != null && auth != authToken) {
             authToken = auth
@@ -137,6 +197,8 @@ class MCPServer private constructor(
             }
         }
     }
+
+    /** Ktor 应用装配：跨域 → JSON 序列化（用 MCP 自己的 McpJson）→ 鉴权与路由 */
     fun Application.configureServer() {
         // 安装 CORS 跨域支持，如果启用了认证则需要配置
         installCors(authEnabled = true)
@@ -148,56 +210,55 @@ class MCPServer private constructor(
         configureAuthenticatedMcp(authToken)
     }
 
+    /**
+     * 装 SSE 插件、Bearer 鉴权，并注册 MCP 的三个端点。
+     *
+     * @param authToken 期望的 Bearer token（空串也会装鉴权，即"必须带空 token" ——
+     *                  实际使用中由设置页保证了非空默认值 appproxy）
+     */
     private fun Application.configureAuthenticatedMcp(authToken: String) {
-        // 安装 SSE（Server-Sent Events）支持，用于服务器推送消息
+        // 安装 SSE（Server-Sent Events）支持：GET /mcp 那条长连接要用
         install(SSE)
-        // 安装认证插件
         install(Authentication) {
-            // 配置 Bearer Token 认证方案，命名为 "mcp-bearer"
+            // 定义名为 "mcp-bearer" 的鉴权方案，下面路由用 authenticate("mcp-bearer") 引用
             bearer("mcp-bearer") {
-                // 定义认证逻辑：验证提供的令牌是否匹配
                 authenticate { credential ->
+                    // 命中则认证通过（principal 名字不重要，只是标识"这个请求来自 mcp 客户端"）；
+                    // 不命中返回 null → Ktor 自动回 401，客户端据此知道 token 不对
                     if (credential.token == authToken) {
-                        // 认证成功，创建用户主体
                         UserIdPrincipal("mcp-client")
                     } else {
-                        // 认证失败，返回 null
                         null
                     }
                 }
             }
         }
 
-        // 存储和管理多个传输通道的并发 Map，key 是 session ID
+        // 会话表：sessionId → transport。放在这里（而不是类字段）是因为它属于**某个 Ktor 应用**，
+        // 每次 startMcpServer() 都会新建一套，随服务停止一起丢弃
         val transports = ConcurrentMap<String, StreamableHttpServerTransport>()
 
-        // 配置路由
         routing {
-            // 对以下路由应用认证要求
+            // 整个 /mcp 子树都要求 Bearer 鉴权（下面三个端点都受此约束）
             authenticate("mcp-bearer") {
-                // 所有 /mcp 路径下的请求都需要认证
                 route("/mcp") {
-                    // SSE 端点，用于建立服务器发送事件连接
+                    // GET：建立 SSE 长连接（服务器主动推消息用）。必须有会话，见下面端点分工说明
                     sse {
-                        // 查找或创建对应的传输通道
                         val transport = findTransport(call, transports) ?: return@sse
-                        // 处理 SSE 请求
+                        // 传 this（SSE 会话）进去：SDK 会把这条长连接与该会话的 transport 关联
                         transport.handleRequest(this, call)
                     }
 
-                    // POST 端点，用于发送消息到服务器
+                    // POST：客户端发消息（initialize / tools/call 全走这里）。允许新建会话
                     post {
-                        // 获取或创建传输通道
                         val transport = getOrCreateTransport(call, transports) ?: return@post
-                        // 处理 POST 请求
+                        // 普通消息走这个重载：request 传 null（不用 SSE 推回，用 JSON 响应，见 enableJsonResponse）
                         transport.handleRequest(null, call)
                     }
 
-                    // DELETE 端点，用于关闭会话
+                    // DELETE：客户端显式结束会话（transport 会从 transports 里移除）
                     delete {
-                        // 查找现有的传输通道
                         val transport = findTransport(call, transports) ?: return@delete
-                        // 处理 DELETE 请求
                         transport.handleRequest(null, call)
                     }
                 }
@@ -205,79 +266,86 @@ class MCPServer private constructor(
         }
     }
 
+    // --- 三个端点的分工（MCP streamable HTTP 规范）---
+    //   POST   —— 客户端发消息（含 initialize）。**没有会话就新建**，这是唯一能开新会话的方法
+    //   GET    —— 建立 SSE 长连接，服务器用它主动推消息（必须有会话；本项目客户端基本不用）
+    //   DELETE —— 显式结束会话
+    // 所以：POST 走 getOrCreateTransport（可新建），GET/DELETE 走 findTransport（必须已存在）
+
+    /**
+     * 按会话 ID 取**已存在**的传输通道；取不到就直接回响应并返回 null（调用方负责 return）。
+     *
+     * 为什么区分 400/404：400 = 客户端压根没带会话头（用错方式），404 = 带了但服务端不认识
+     * （会话过期/服务重启过）。排查问题时这两种情况含义完全不同，所以没有合并。
+     */
     private suspend fun findTransport(
         call: ApplicationCall,
         transports: ConcurrentMap<String, StreamableHttpServerTransport>,
     ): StreamableHttpServerTransport? {
-        // 从请求头中获取会话 ID
         val sessionId = call.request.header(MCP_SESSION_ID_HEADER)
-        // 检查会话 ID 是否存在
         if (sessionId.isNullOrEmpty()) {
-            // 没有提供有效的会话 ID，返回 400 错误
             call.respond(HttpStatusCode.BadRequest, "Bad Request: No valid session ID provided")
             return null
         }
-        // 根据会话 ID 查找对应的传输通道
         val transport = transports[sessionId]
-        // 检查传输通道是否存在
         if (transport == null) {
-            // 会话 ID 存在但找不到对应的传输通道，返回 404 错误
             call.respond(HttpStatusCode.NotFound, "Session not found")
             return null
         }
-        // 成功找到传输通道
         return transport
     }
 
     /**
-     * 获取或创建传输通道
-     * @param call 当前的应用调用上下文
-     * @param transports 传输通道映射表
-     * @return 获取到或新创建的传输通道，如果出错则返回 null
+     * 取会话对应的传输通道；**没有会话头时创建一个新会话**（POST initialize 走这条）。
+     *
+     * 一个"会话"= 一个 StreamableHttpServerTransport + 一个 MCP Server 实例：
+     *   - 新会话建立后，SDK 会回调 setOnSessionInitialized 把 sessionId 告诉我们，存进 transports
+     *   - 会话结束（DELETE 或 server 关闭）时移除，避免 transports 无限增长
+     *
+     * @param call 当前请求
+     * @param transports 会话表（sessionId → transport）
+     * @return 可用的 transport；出错时已回响应并返回 null（调用方直接 return）
      */
     private suspend fun getOrCreateTransport(
         call: ApplicationCall,
         transports: ConcurrentMap<String, StreamableHttpServerTransport>,
     ): StreamableHttpServerTransport? {
-        // 尝试从请求头中获取已有的会话 ID
         val sessionId = call.request.header(MCP_SESSION_ID_HEADER)
-        // 如果提供了会话 ID，说明是已有会话
+
+        // 带了会话头 = 复用已有会话（找不到就 404，让客户端重新 initialize）
         if (sessionId != null) {
             val transport = transports[sessionId]
             if (transport == null) {
-                // 会话 ID 存在但找不到对应的传输通道，返回 404 错误
                 call.respond(HttpStatusCode.NotFound, "Session not found")
             }
             return transport
         }
 
-        // 如果没有会话 ID，说明是新会话，需要创建新的传输通道
-        // 创建传输通道配置，启用 JSON 响应格式
+        // 没带会话头 = 新会话。enableJsonResponse = 每个请求直接回 JSON，
+        // 而不是挂一条 SSE 流（对 Claude 这类"请求-响应"式客户端更简单、也更省连接）
         val configuration = StreamableHttpServerTransport.Configuration(
             enableJsonResponse = true,
         )
-        // 根据配置创建传输通道实例
         val transport = StreamableHttpServerTransport(configuration)
 
-        // 设置会话初始化回调：当会话初始化完成时，将传输通道存入映射表
+        // 会话建立后 SDK 才分配 sessionId，所以这里用回调把 transport 登记进表
         transport.setOnSessionInitialized { initializedSessionId ->
             transports[initializedSessionId] = transport
         }
-        // 设置会话关闭回调：当会话关闭时，从映射表中移除对应的传输通道
+        // 会话关闭：从表里移除（否则内存只涨不降）
         transport.setOnSessionClosed { closedSessionId ->
             transports.remove(closedSessionId)
         }
 
-        // 创建 MCP 服务器实例
+        // 每个会话一个 Server 实例：工具/提示词的注册在 createMcpServer() 里完成
         val server = createMcpServer()
-        // 设置服务器关闭时的清理逻辑：确保传输通道被移除
+        // server 被关闭时兜底清理（有些关闭路径不会走 onSessionClosed）
         server.onClose {
             transport.sessionId?.let { transports.remove(it) }
         }
-        // 在服务器中创建新的会话，传入传输通道
+        // 把 transport 与 server 绑起来：之后该会话的请求都会路由到这个 server 的处理逻辑
         server.createSession(transport)
 
-        // 返回新创建的传输通道
         return transport
     }
 
@@ -306,6 +374,24 @@ class MCPServer private constructor(
         }
     }
 
+    @SuppressLint("SuspiciousIndentation")
+    // ---------------------------------------------------------------- MCP Server（工具 / 提示词注册）
+    //
+    // 【为什么每个会话都新建一个 Server】
+    // SDK 的 Server 承载会话状态（能力协商结果、已注册工具的快照等），复用同一实例会串会话。
+    // 实例本身很轻，新建开销可忽略；真正的重活（起代理进程）在工具回调里。
+    //
+    // 【工具清单（5 个）与共同约定】
+    //   start_proxy          启代理（参数：代理地址/类型/账号 + 分应用列表 + 引擎）
+    //   stop_proxy           停代理（按"实际在跑的引擎"停，不需要调用方传引擎）
+    //   get_proxy_status     查是否在跑
+    //   get_proxy_config     查当前配置（含引擎名）
+    //   update_proxy_config  改配置并重启（eBPF 引擎下会重建 config.json 再起进程）
+    // 约定：① 引擎由参数 proxyEngine 选择，缺省 tun2socks（老客户端行为不变）
+    //       ② 两个引擎互斥：任一在跑时 start 都会被拒（返回 "Proxy is already running"）
+    //       ③ 参数校验失败一律返回 CallToolResult(isError = true) + 可读原因，不抛异常
+
+    /** 装配一个会话用的 MCP Server：声明能力 + 注册 5 个工具与 1 个提示词 */
     private fun createMcpServer(): Server {
         val server = Server(
             Implementation(
@@ -394,15 +480,29 @@ class MCPServer private constructor(
                             add("[]")
                         })
                     }
+                    putJsonObject("proxyEngine") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Proxy engine: 'tun2socks' (default, VpnService) or 'ebpf' (sing-box transparent proxy, requires root and a passed detection on the device)"
+                        )
+                        put("default", "tun2socks")
+                        put("enum", buildJsonArray {
+                            add("tun2socks")
+                            add("ebpf")
+                        })
+                    }
                 },
                 required = listOf("proxyHost", "proxyPort", "proxyType", "proxyName")
             ),
         ) { request ->
             try {
-                if (vpnController!!.getVpnStatus() == true){
+                // ① 先看有没有引擎在跑：两引擎互斥，重复启动会打架（端口/钩子冲突）
+                if (anyEngineRunning()){
                     return@addTool CallToolResult(content = listOf(TextContent("Proxy is already running")), isError = true)
                 }
                 Log.d(TAG, "start_vpn called with arguments: ${request.arguments}")
+                // ② 取参数（MCP 参数全按字符串传；缺省值就是文档里写的 default）
                 val proxyHost = request.arguments?.get("proxyHost")?.jsonPrimitive?.content ?: ""
                 val proxyPort = request.arguments?.get("proxyPort")?.jsonPrimitive?.content ?: ""
                 val proxyType =
@@ -413,7 +513,7 @@ class MCPServer private constructor(
                 val appListJson =
                     request.arguments?.get("appProxyPackageList")?.jsonPrimitive?.content ?: "[]"
 
-                // 验证必需参数
+                // ③ 必填校验：名称/地址/端口不能空（账号密码可以为空 = 代理不需要鉴权）
                 if (proxyName.isBlank() || proxyHost.isBlank() || proxyPort.isBlank()) {
                     Log.e(TAG, "Error: proxyName or proxyHost or proxyPort are required")
                     return@addTool CallToolResult(
@@ -423,7 +523,7 @@ class MCPServer private constructor(
                         isError = true
                     )
                 }
-                // 校验 用户名 密码 长度大于30 报错
+                // ④ 长度校验：代理账号密码过长通常是"把别的东西粘进来了"，早报错比传到下游再失败好
                 if (proxyUser.length > 30 || proxyPass.length > 30) {
                     Log.e(TAG, "Error: proxyUser or proxyPass is too long")
                     return@addTool CallToolResult(
@@ -433,11 +533,14 @@ class MCPServer private constructor(
                         isError = true
                     )
                 }
+                // ⑤ 分应用列表校验：必须是设备上真实存在的包名
+                //    （注意这里借用了 vpnController 的包名表——它由 MainActivity 注入；两个引擎用的是同一份列表）
                 val type = object : TypeToken<List<String>>(){}.type
                 val appList: List<String> = Gson().fromJson(appListJson, type)
                 val packageList = vpnController!!.getPackageList()
-                
+
                 if (!packageList.containsAll(appList)){
+                    // 报出具体是哪些包名不合法，便于调用方修正
                     val missingPackages = appList.filter { it !in packageList }
                     Log.e(TAG, "Error: $missingPackages is not valid")
                     return@addTool CallToolResult(
@@ -456,6 +559,18 @@ class MCPServer private constructor(
                     "proxyPass" to proxyPass,
                     "appProxyPackageList" to appList
                 )
+
+                // 引擎分流：ebpf → sing-box(root 透明代理)；其余（默认）走原 tun2socks 路径，行为完全不变
+                val proxyEngine =
+                    request.arguments?.get("proxyEngine")?.jsonPrimitive?.content ?: "tun2socks"
+                if (proxyEngine == "ebpf") {
+                    val result = ebpfController.start(config)
+                    Log.d(TAG, "start_proxy(ebpf) result: $result")
+                    return@addTool CallToolResult(
+                        content = listOf(TextContent(result)),
+                        isError = result.startsWith("Error")
+                    )
+                }
 
                 val intent = VpnService.prepare(context)
                 if (intent != null) {
@@ -495,14 +610,18 @@ class MCPServer private constructor(
             inputSchema = ToolSchema()
         ){
             _->
+                // stop_proxy：**不需要**调用方说明停哪个引擎 —— 先问 eBPF 在不在跑，
+                // 在跑就停它，否则走 tun2socks（两引擎互斥，所以这个二选一是确定的）
                 try {
                     Log.d(TAG, "stop_proxy called")
-                    val result: String = vpnController!!.stopVpn()
+                    val result: String =
+                        if (ebpfController.getStatus()) ebpfController.stop() else vpnController!!.stopVpn()
                     Log.d(TAG, "Proxy stop result: $result")
                     return@addTool CallToolResult(
                         content = listOf(
                             TextContent(result)
                         ),
+                        // 结果里带 "Error"/"not granted" 视为失败（VPN 未授权时是后一种）
                         isError = result.startsWith("Error") || result.contains("not granted")
                     )
                 }catch (e: Exception){
@@ -515,7 +634,7 @@ class MCPServer private constructor(
                     )
                 }
         }
-        // 获取 proxy 状态
+        // get_proxy_status：只回答"在不在跑"（两个引擎任一在跑即 true）
         server.addTool(
             "get_proxy_status",
             description = "Get the status of the proxy service",
@@ -523,12 +642,13 @@ class MCPServer private constructor(
         ){
             _-> try {
                 Log.d(TAG, "get_proxy_status called")
-                val result: Boolean = vpnController!!.getVpnStatus() == true
+                val result: Boolean = anyEngineRunning()
                 Log.d(TAG, "Proxy status: $result")
             return@addTool CallToolResult(
                     content = listOf(
                         TextContent(if (result) "Proxy is running" else "Proxy is not running")
                     ),
+                    // 「没在跑」也算 isError=true：调用方通常期望"起来"，好区分成功与否
                     isError = !result
                 )
             } catch (e: Exception) {
@@ -540,18 +660,25 @@ class MCPServer private constructor(
                 )
             }
         }
-        // 查看当前 proxy 设置
+        // get_proxy_config：回答"在不在跑 + 引擎名 + 当前配置"
         server.addTool(
             "get_proxy_config",
             description = "Get the current proxy configuration",
             inputSchema = ToolSchema()
         ){
             _ -> try {
-            val result: Boolean = vpnController!!.getVpnStatus() == true
+            // 一次查询拿全：谁在跑 + engine 名（eBPF 的 getStatus 会跑 root 命令，避免重复调用）
+            val ebpfRunning = ebpfController.getStatus()
+            val running = ebpfRunning || vpnController?.getVpnStatus() == true
+            // 引擎名仅用于展示/排查；注意"没在跑"时也会给出 tun2socks（默认引擎），
+            // 所以调用方判断"有没有在跑"要看 running 的文案，而不是引擎名
+            val engine = if (ebpfRunning) "ebpf" else "tun2socks"
                 return@addTool CallToolResult(
                     content = listOf(
                         TextContent(
-                            "${if (result) "Proxy is running" else "Proxy is not running"}, Current proxy configuration:"+ vpnController!!.getVpvConfig().toString() )
+                            "${if (running) "Proxy is running" else "Proxy is not running"} (engine=$engine), Current proxy configuration:" +
+                                (if (ebpfRunning) ebpfController.getConfig().toString() else vpnController!!.getVpvConfig().toString())
+                        )
                     )
                 )
             }catch (e: Exception){
@@ -620,12 +747,24 @@ class MCPServer private constructor(
                             add("[]")
                         })
                     }
+                    putJsonObject("proxyEngine") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Proxy engine: 'tun2socks' (default) or 'ebpf'. Updating an eBPF proxy rebuilds config.json and restarts sing-box."
+                        )
+                        put("enum", buildJsonArray {
+                            add("tun2socks")
+                            add("ebpf")
+                        })
+                    }
                 }
             )
         ){
             request ->
             try {
-                if (vpnController!!.getVpnStatus() == false){
+                // ① 前提：必须有代理在跑 —— 这个工具的语义是"改运行中的配置并重启"，没在跑就没有可改的
+                if (!anyEngineRunning()){
                     return@addTool CallToolResult(content = listOf(TextContent("Proxy is not running")), isError = true)
                 }
                 val proxyHost = request.arguments?.get("proxyHost")?.jsonPrimitive?.content ?: ""
@@ -637,6 +776,7 @@ class MCPServer private constructor(
                 val appListJson =
                     request.arguments?.get("appProxyPackageList")?.jsonPrimitive?.content ?: "[]"
 
+                // ② 分应用列表校验：空列表 = 全部接管（合法），非空则必须都是设备上真实存在的包名
                 val type = object : TypeToken<List<String>>(){}.type
                 val appList: List<String> = Gson().fromJson(appListJson, type)
                 val packageList = vpnController!!.getPackageList()
@@ -661,6 +801,34 @@ class MCPServer private constructor(
                     )
                 }
 
+                // ---- eBPF 引擎：重建 config.json 并重启 sing-box ----
+                // 触发条件：eBPF 正在运行，或调用方显式要求 proxyEngine=ebpf
+                // （eBPF 是"改配置就重启进程"的模型，所以先 stop 再 start 即可，没有别的通路）
+                val proxyEngine =
+                    request.arguments?.get("proxyEngine")?.jsonPrimitive?.content
+                if (ebpfController.getStatus() || proxyEngine == "ebpf") {
+                    // 旧进程先停：否则新进程会和它抢内核附着/端口
+                    if (ebpfController.getStatus()) {
+                        ebpfController.stop()
+                    }
+                    val result = ebpfController.start(
+                        mapOf(
+                            "proxyHost" to proxyHost,
+                            "proxyPort" to proxyPort,
+                            "proxyType" to proxyType,
+                            "proxyUser" to proxyUser,
+                            "proxyPass" to proxyPass,
+                            "appProxyPackageList" to appList,
+                        )
+                    )
+                    Log.i(TAG, "Proxy(ebpf) update result: $result")
+                    return@addTool CallToolResult(
+                        content = listOf(TextContent(result)),
+                        isError = result.startsWith("Error")
+                    )
+                }
+
+                // ---- tun2socks 引擎（原路径，行为不变）----
                 var config = mapOf(
                     "proxyHost" to proxyHost,
                     "proxyPort" to proxyPort,
@@ -669,8 +837,10 @@ class MCPServer private constructor(
                     "proxyPass" to proxyPass,
                     "appProxyPackageList" to appList,
                 )
+                // setVpnConfig 返回 true = 有字段真的变了、需要重启 VPN 才生效
                 val isRestartMcpServer = vpnController!!.setVpnConfig(config)
                 if (isRestartMcpServer){
+                    // tun2socks 没有热改能力：重启 = 停掉 VPN 服务再按新配置起来
                     vpnController!!.stopVpn()
                     config = vpnController!!.getVpvConfig()!!
                     val result: String = vpnController!!.startVpn(config)
@@ -700,6 +870,7 @@ class MCPServer private constructor(
                 )
             }
         }
+        // 提示词：给 MCP 客户端一段"怎么用这个服务"的说明书（客户端可主动拉取）
         server.addPrompt(
             "how_to_use_appproxy-mcp",
             description = "Guide for using appproxy-mcp",

@@ -18,6 +18,7 @@ class AppProxyPackageList {
     _proxyPackageList.add(appPackageName);
   }
 
+  /// 从"需要代理的包名集合"里移除一个包名
   void remove(String appPackageName) {
     if (kDebugMode) {
       print("remove:$appPackageName");
@@ -25,6 +26,7 @@ class AppProxyPackageList {
     _proxyPackageList.remove(appPackageName);
   }
 
+  /// 清空集合（"全不选"时调用）
   void clear() {
     if (kDebugMode) {
       print("clear appPackageName");
@@ -32,11 +34,17 @@ class AppProxyPackageList {
     _proxyPackageList.clear();
   }
 
+  /// 导出为 JSON 字符串（原生侧解析用）
   String getListString() {
     if (kDebugMode) {
       print("getList:${_proxyPackageList.toList()}");
     }
     return jsonEncode(_proxyPackageList.toList());
+  }
+
+  /// 原始列表（eBPF 的 config.json 生成用：直接写进 include_package）
+  List<String> getList() {
+    return _proxyPackageList.toList();
   }
 }
 // 保存已选择的app

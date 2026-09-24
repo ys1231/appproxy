@@ -101,6 +101,11 @@ class Utils(private val context: Context) {
         Log.d(TAG, "initAppList: end")
     }
 
+    /**
+     * 取应用列表（JSON 字符串）。
+     * 首次命中缓存直接返回（省去遍历+取图标的重活）；之后每次都重新扫描，
+     * 这样用户在"配置"页看到的是最新的安装/卸载情况。
+     */
     fun getAppList(): String? {
         if (isFirstGetApps && appList != null) {
             isFirstGetApps = false
@@ -111,6 +116,7 @@ class Utils(private val context: Context) {
         }
     }
 
+    /** 只取包名（不带图标/标签），供 MCP 校验参数里的包名是否为本机已装应用 */
     fun getPackageList(): List<String> {
         val pm = context.packageManager
 

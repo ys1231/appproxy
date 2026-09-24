@@ -26,6 +26,7 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   // This widget is the root of your application.
+  /// 构建界面
   @override
   Widget build(BuildContext context) {
     /**
@@ -80,6 +81,7 @@ class MyApp extends StatelessWidget {
 class iyueMainPage extends StatefulWidget {
   const iyueMainPage({super.key});
 
+  /// 创建 State（Flutter 生命周期样板）
   @override
   State<iyueMainPage> createState() => _iyueMainPageState();
 }
@@ -90,6 +92,7 @@ class _iyueMainPageState extends State<iyueMainPage> {
   late List<Widget> _children;
 
   // initState函数是在State对象被创建并插入到Widget树中时调用的。
+  /// 初始化：读取数据 / 装配回调（只执行一次）
   @override
   void initState() {
     super.initState(); // 调用父类的initState方法
@@ -104,6 +107,7 @@ class _iyueMainPageState extends State<iyueMainPage> {
     ];
   }
 
+  /// 构建界面
   @override
   Widget build(BuildContext context) {
     return Scaffold(

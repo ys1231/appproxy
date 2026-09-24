@@ -25,6 +25,7 @@ class AppProxyConfigData {
     return File('$path/$_configName');
   }
 
+  /// 保存"包名 → 是否走代理"的映射（配置页勾选后立即落盘）
   Future<bool> saveAppConfig(Map<String, bool> data) async {
     final file = await _localFile;
     try {

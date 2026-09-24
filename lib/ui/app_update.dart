@@ -17,6 +17,7 @@ class AppUpdate extends StatefulWidget {
   String modifyContent;
   String downloadUrl;
 
+  /// 创建 State
   @override
   State<AppUpdate> createState() => _AppUpdateState();
 }
@@ -24,11 +25,13 @@ class AppUpdate extends StatefulWidget {
 class _AppUpdateState extends State<AppUpdate> {
   static const platform = MethodChannel('cn.ys1231/appproxy/appupdate');
 
+  /// 初始化（本页无额外初始化逻辑，保留框架方法）
   @override
   void initState() {
     super.initState();
   }
 
+  /// 构建更新弹窗：版本信息 + Markdown 更新内容 + 「取消 / 下载」
   @override
   Widget build(BuildContext context) {
     final maxWidth = MediaQuery.of(context).size.width * 0.8; // 设置为屏幕宽度的80%

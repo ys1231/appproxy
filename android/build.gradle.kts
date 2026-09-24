@@ -5,6 +5,8 @@ allprojects {
         maven("https://maven.aliyun.com/repository/central")
         maven("https://maven.aliyun.com/repository/public")
         maven("https://mirrors.huaweicloud.com/repository/maven/")
+        // libsu 只在 JitPack 发布（eBPF 模式用 root shell 启动 sing-box）
+        maven("https://jitpack.io")
         google()
         mavenCentral()
     }
