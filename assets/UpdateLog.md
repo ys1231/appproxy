@@ -1,3 +1,18 @@
+- feat(ebpf): 修复 http/socks5 代理链路并支持选择二进制版本
+- 修复 HTTP 上游不支持 UDP 时的 CONNECT-UDP 404：ebpf 默认接管 tcp+udp，
+  HTTP 在路由层 reject 非 DNS UDP，SOCKS5 走 UDP ASSOCIATE
+- DNS 改为 hijack + 双 DoH group（经代理）+ 直连 bootstrap，
+  strategy=ipv4_only，并拒绝公网 IPv6，消除 DNS 泄漏与代理链路 EOF
+- data_plane 支持 tc→socket_assign 迁移、按设备能力选择与双向回退
+- 严格校验代理类型/地址/端口/network/data_plane，非法配置直接报错
+- App 启动不再请求 VPN 授权，避免打断其它 VPN；tun2socks 启动时申请并支持
+  授权后自动续接
+- ebpf 启动遇 address already in use 自动重试；启动前校验二进制，收紧就绪
+  判定，清理含凭据的临时配置，收紧运行目录/日志权限
+- MCP 更新继承 ebpfNetwork/ebpfDataPlane，日志掩码账号密码
+- 设置页新增“选择版本”：从 update.json.versions 下载指定二进制版本
+- 清理配置页 HTTP+UDP 提示、无引用 l10n 与死代码
+---
 - feat(ebpf): :fire: 集成eBPF透明代理支持并新增相关管理功能
 ---
 - feat(restore): :sparkles: #34 添加代理配置备份与还原功能

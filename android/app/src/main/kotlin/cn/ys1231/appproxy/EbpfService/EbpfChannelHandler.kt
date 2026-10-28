@@ -86,9 +86,12 @@ class EbpfChannelHandler(private val activity: Activity, private val context: Co
 
             "downloadBinary" -> {
                 val downloadBase = call.argument<String>("downloadBase")
+                // 可选：指定版本（必须存在于 update.json 的 versions）；不传 = 最新版
+                val version = call.argument<String>("version")
                 runAsync(result) {
-                    manager.downloadBinary(downloadBase) { percent -> sendProgress("download", percent) }
-                        .toMap()
+                    manager.downloadBinary(downloadBase, version = version) { percent ->
+                        sendProgress("download", percent)
+                    }.toMap()
                 }
             }
 
@@ -179,6 +182,8 @@ private fun EbpfProxyManager.BinaryUpdateInfo.toMap(): Map<String, Any?> = mapOf
     "versionCode" to versionCode,
     "downloadUrl" to downloadUrl,
     "changelogUrl" to changelogUrl,
+    // 可下载的版本列表（设置页「指定版本」下拉用；已清洗且包含 latestVersion）
+    "versions" to versions,
     "error" to error,
 )
 
@@ -187,7 +192,7 @@ private fun EbpfProxyManager.SupportStatus.toMap(): Map<String, Any?> = mapOf(
     "binaryReady" to binaryReady,
     "supported" to supported,
     "cgroup" to cgroup,
-    "tc" to tc,
+    "socketAssign" to socketAssign,
     "runtimeDir" to runtimeDir,
     "kernelRelease" to kernelRelease,
     "binaryVersion" to binaryVersion,
@@ -197,7 +202,7 @@ private fun EbpfProxyManager.SupportStatus.toMap(): Map<String, Any?> = mapOf(
     "checkedAt" to checkedAt,
     "result" to result,
     "cgroupReasons" to cgroupReasons,
-    "tcReasons" to tcReasons,
+    "socketAssignReasons" to socketAssignReasons,
     "wasRunning" to wasRunning,
 )
 

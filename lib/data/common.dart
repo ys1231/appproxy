@@ -10,7 +10,6 @@ class AppSetings {
   static const String _sAuthToken = "sAuthToken";
   // ---- eBPF(sing-box) 引擎相关（设置页「eBPF 透明代理」分区）----
   // 注意：这些属于「设置侧」数据，**不参与备份/恢复**（备份只含 proxyConfig.json）
-  static const String _ebpfDataPlane = "ebpfDataPlane"; // cgroup | tc
   static const String _ebpfDownloadBase = "ebpfDownloadBase"; // 自定义下载源，留空用官方
   static const String _ebpfProfiles = "ebpfProfiles"; // 哪些代理配置走 eBPF（按配置名）
 
@@ -96,18 +95,6 @@ class AppSetings {
   static Future<bool> setAuthToken(String value) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.setString(_sAuthToken, value);
-  }
-
-  /// eBPF 数据面：cgroup（默认，已实测）| tc（部分厂家 netd 冲突时的退路）
-  static Future<String> getEbpfDataPlane() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_ebpfDataPlane) ?? "cgroup";
-  }
-
-  /// 设置 eBPF 数据面
-  static Future<bool> setEbpfDataPlane(String value) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.setString(_ebpfDataPlane, value);
   }
 
   /// 二进制自定义下载源（留空 = 用官方 pfile 地址）

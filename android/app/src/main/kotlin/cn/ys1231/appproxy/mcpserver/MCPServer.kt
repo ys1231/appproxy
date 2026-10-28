@@ -20,7 +20,10 @@ import io.ktor.server.sse.sse
 import io.modelcontextprotocol.kotlin.sdk.types.McpJson
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.io.File
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -32,7 +35,6 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
-import io.ktor.server.plugins.origin
 import io.ktor.server.request.header
 import io.ktor.server.response.respond
 import io.modelcontextprotocol.kotlin.sdk.server.Server
@@ -43,7 +45,6 @@ import io.ktor.util.collections.ConcurrentMap
 import io.modelcontextprotocol.kotlin.sdk.server.StreamableHttpServerTransport
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.GetPromptResult
-import io.modelcontextprotocol.kotlin.sdk.types.PromptArgument
 import io.modelcontextprotocol.kotlin.sdk.types.PromptMessage
 import io.modelcontextprotocol.kotlin.sdk.types.Role
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
@@ -374,6 +375,73 @@ class MCPServer private constructor(
         }
     }
 
+    /**
+     * 从 Flutter 的 proxyConfig.json 读取某条代理配置已保存的 eBPF 可调项。
+     *
+     * 为什么需要它：MCP 的 update_proxy_config 是「停旧进程 → 用新参数重建配置 → 再启动」，
+     * 调用方通常只改地址/账号，不会重复传 ebpfNetwork/ebpfDataPlane。若不继承旧值，
+     * 生成器会回落到默认值（例如 http 默认按新规则取 all），接管范围会被悄悄改掉。
+     *
+     * 文件位置：Dart 的 `getApplicationDocumentsDirectory()` 在 Android 上映射为
+     * `context.getDir("flutter", MODE_PRIVATE)`（app_flutter 目录）；这里再兼容 filesDir /
+     * dataDir 两种历史布局。文件不存在或解析失败时安静返回 (null, null)。
+     *
+     * 选择顺序：显式传了 proxyName 时**只按名称精确匹配**，未命中直接不继承（不拿 host/单条
+     * 兜底去猜，避免把别的配置的 eBPF 参数套过来）；未传时按 请求里的 host+port 匹配（单条）
+     * → 同 host 单条 → 全表仅一条时用它。
+     */
+    private fun readStoredEbpfOptions(
+        proxyName: String?,
+        proxyHost: String,
+        proxyPort: String,
+    ): Pair<String?, String?> {
+        val file = proxyConfigFile() ?: return null to null
+        return try {
+            val entries = JsonParser.parseString(file.readText()).asJsonArray
+                .mapNotNull { it as? JsonObject }
+            val picked = if (proxyName != null) {
+                // 显式指定名称却未命中：直接不继承，不用 host/单条兜底猜测
+                entries.firstOrNull { it.stringValue("proxyName") == proxyName } ?: return null to null
+            } else {
+                entries.filter {
+                    it.stringValue("proxyHost") == proxyHost &&
+                        it.stringValue("proxyPort") == proxyPort
+                }.singleOrNull()
+                    ?: entries.filter { it.stringValue("proxyHost") == proxyHost }.singleOrNull()
+                    ?: entries.singleOrNull()
+            }
+            if (picked == null) {
+                null to null
+            } else {
+                picked.stringValue("ebpfNetwork") to picked.stringValue("ebpfDataPlane")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "readStoredEbpfOptions: ${e.message}")
+            null to null
+        }
+    }
+
+    /** proxyConfig.json 路径（Flutter 文档目录优先，兼容历史布局）；不存在返回 null */
+    private fun proxyConfigFile(): File? = listOf(
+        File(context.getDir("flutter", Context.MODE_PRIVATE), "proxyConfig.json"),
+        File(context.filesDir, "proxyConfig.json"),
+        File(context.dataDir, "proxyConfig.json"),
+    ).firstOrNull { it.isFile }
+
+    /** 读 JSON 对象里的字符串字段；缺失/空串/非标量都返回 null */
+    private fun JsonObject.stringValue(key: String): String? =
+        get(key)?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it.isNotBlank() }
+
+    /**
+     * 日志脱敏：代理账号/密码不允许以明文写入 logcat。
+     *
+     * 兼容两种入参：MCP 请求参数（JsonObject / Map<String, JsonElement>）与内部 config Map。
+     * 只替换这两个键的值，其余字段原样保留，便于排查。
+     */
+    private fun maskSecrets(args: Map<String, *>?): Map<String, *>? = args?.mapValues { (key, value) ->
+        if (key == "proxyUser" || key == "proxyPass") "***" else value
+    }
+
     @SuppressLint("SuspiciousIndentation")
     // ---------------------------------------------------------------- MCP Server（工具 / 提示词注册）
     //
@@ -492,6 +560,31 @@ class MCPServer private constructor(
                             add("ebpf")
                         })
                     }
+                    // ---- 以下仅 eBPF 引擎使用（可选，不传则用默认值）----
+                    putJsonObject("ebpfNetwork") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: capture network. Default: 'all' for both; http additionally rejects UDP at route layer. 'tcp' = TCP only (UDP bypasses the proxy), 'udp' = UDP only."
+                        )
+                        put("enum", buildJsonArray {
+                            add("all")
+                            add("tcp")
+                            add("udp")
+                        })
+                    }
+                    putJsonObject("ebpfDataPlane") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: kernel data plane. 'cgroup' (default) or 'socket_assign' (only if detection reports it supported)"
+                        )
+                        put("default", "cgroup")
+                        put("enum", buildJsonArray {
+                            add("cgroup")
+                            add("socket_assign")
+                        })
+                    }
                 },
                 required = listOf("proxyHost", "proxyPort", "proxyType", "proxyName")
             ),
@@ -501,7 +594,7 @@ class MCPServer private constructor(
                 if (anyEngineRunning()){
                     return@addTool CallToolResult(content = listOf(TextContent("Proxy is already running")), isError = true)
                 }
-                Log.d(TAG, "start_vpn called with arguments: ${request.arguments}")
+                Log.d(TAG, "start_vpn called with arguments: ${maskSecrets(request.arguments)}")
                 // ② 取参数（MCP 参数全按字符串传；缺省值就是文档里写的 default）
                 val proxyHost = request.arguments?.get("proxyHost")?.jsonPrimitive?.content ?: ""
                 val proxyPort = request.arguments?.get("proxyPort")?.jsonPrimitive?.content ?: ""
@@ -550,15 +643,20 @@ class MCPServer private constructor(
                         isError = true
                     )
                 }
-                val config = mapOf(
-                    "proxyHost" to proxyHost,
-                    "proxyPort" to proxyPort,
-                    "proxyType" to proxyType,
-                    "proxyName" to proxyName,
-                    "proxyUser" to proxyUser,
-                    "proxyPass" to proxyPass,
-                    "appProxyPackageList" to appList
-                )
+                val config = buildMap {
+                    put("proxyHost", proxyHost)
+                    put("proxyPort", proxyPort)
+                    put("proxyType", proxyType)
+                    put("proxyName", proxyName)
+                    put("proxyUser", proxyUser)
+                    put("proxyPass", proxyPass)
+                    put("appProxyPackageList", appList)
+                    // eBPF 可调项（可选）：不传时由生成器使用默认值；
+                    // 与编辑配置页写入 proxyConfig.json 的键保持一致
+                    request.arguments?.get("ebpfNetwork")?.jsonPrimitive?.content?.let { put("ebpfNetwork", it) }
+                    request.arguments?.get("ebpfDataPlane")?.jsonPrimitive?.content?.let { put("ebpfDataPlane", it) }
+                }
+                Log.d(TAG, "start_proxy config: ${maskSecrets(config)}")
 
                 // 引擎分流：ebpf → sing-box(root 透明代理)；其余（默认）走原 tun2socks 路径，行为完全不变
                 val proxyEngine =
@@ -758,6 +856,37 @@ class MCPServer private constructor(
                             add("ebpf")
                         })
                     }
+                    // ---- 以下仅 eBPF 引擎使用（可选）----
+                    putJsonObject("proxyName") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Optional: name of the proxy configuration. Used to find its saved ebpfNetwork/ebpfDataPlane in proxyConfig.json when those are not passed explicitly."
+                        )
+                    }
+                    putJsonObject("ebpfNetwork") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: capture network. Omit to inherit the saved value from proxyConfig.json (fallback: 'all'). 'tcp' = TCP only, 'udp' = UDP only."
+                        )
+                        put("enum", buildJsonArray {
+                            add("all")
+                            add("tcp")
+                            add("udp")
+                        })
+                    }
+                    putJsonObject("ebpfDataPlane") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: kernel data plane. Omit to inherit the saved value from proxyConfig.json (fallback: cgroup or the plane supported by this device)."
+                        )
+                        put("enum", buildJsonArray {
+                            add("cgroup")
+                            add("socket_assign")
+                        })
+                    }
                 }
             )
         ){
@@ -807,20 +936,40 @@ class MCPServer private constructor(
                 val proxyEngine =
                     request.arguments?.get("proxyEngine")?.jsonPrimitive?.content
                 if (ebpfController.getStatus() || proxyEngine == "ebpf") {
+                    // eBPF 可调项：调用方没传时从 proxyConfig.json 的已有配置继承。
+                    // 否则「只改地址/账号」这种局部更新会把 ebpfNetwork/ebpfDataPlane 重置成
+                    // 生成器默认值：轻则接管范围被悄悄改掉，重则（设备只支持一种数据面）起不来。
+                    val ebpfNetworkArg = request.arguments?.get("ebpfNetwork")
+                        ?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val ebpfDataPlaneArg = request.arguments?.get("ebpfDataPlane")
+                        ?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val proxyNameArg = request.arguments?.get("proxyName")
+                        ?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val stored = readStoredEbpfOptions(proxyNameArg, proxyHost, proxyPort)
+                    val ebpfNetwork = ebpfNetworkArg ?: stored.first
+                    val ebpfDataPlane = ebpfDataPlaneArg ?: stored.second
+                    Log.d(
+                        TAG,
+                        "update_proxy_config(ebpf): network=$ebpfNetwork dataPlane=$ebpfDataPlane " +
+                            "(stored network=${stored.first} dataPlane=${stored.second})"
+                    )
+
                     // 旧进程先停：否则新进程会和它抢内核附着/端口
                     if (ebpfController.getStatus()) {
                         ebpfController.stop()
                     }
-                    val result = ebpfController.start(
-                        mapOf(
-                            "proxyHost" to proxyHost,
-                            "proxyPort" to proxyPort,
-                            "proxyType" to proxyType,
-                            "proxyUser" to proxyUser,
-                            "proxyPass" to proxyPass,
-                            "appProxyPackageList" to appList,
-                        )
-                    )
+                    val ebpfConfig = buildMap {
+                        put("proxyHost", proxyHost)
+                        put("proxyPort", proxyPort)
+                        put("proxyType", proxyType)
+                        put("proxyUser", proxyUser)
+                        put("proxyPass", proxyPass)
+                        put("appProxyPackageList", appList)
+                        if (ebpfNetwork != null) put("ebpfNetwork", ebpfNetwork)
+                        if (ebpfDataPlane != null) put("ebpfDataPlane", ebpfDataPlane)
+                        if (proxyNameArg != null) put("proxyName", proxyNameArg)
+                    }
+                    val result = ebpfController.start(ebpfConfig)
                     Log.i(TAG, "Proxy(ebpf) update result: $result")
                     return@addTool CallToolResult(
                         content = listOf(TextContent(result)),

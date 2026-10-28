@@ -53,7 +53,7 @@ class EbpfProxyData {
     return EbpfSupportStatus.fromMap(raw);
   }
 
-  /// 完整检测（root + 二进制 + 运行目录 + cgroup/tc 两种数据面），结果持久化到原生 support.json。
+  /// 完整检测（root + 二进制 + 运行目录 + cgroup/socket_assign 两种数据面），结果持久化到原生 support.json。
   /// [autoDownload] 为 true 时，二进制缺失会先自动下载再检测（设置页「检测」按钮用）。
   static Future<EbpfSupportStatus> checkEbpfSupport({bool autoDownload = true}) async {
     _ensureHandler();
@@ -78,10 +78,15 @@ class EbpfProxyData {
     return EbpfBinaryUpdateInfo.fromMap(raw);
   }
 
-  /// 按 ABI 重新下载二进制（设置页「下载/重新下载」）
-  static Future<EbpfBinaryStatus> downloadBinary() async {
+  /// 按 ABI 重新下载二进制（设置页「下载/重新下载」）。
+  /// [version] 非空时下载指定版本（交给原生处理），为空保持原调用（下载最新）。
+  static Future<EbpfBinaryStatus> downloadBinary({String? version}) async {
     _ensureHandler();
-    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>('downloadBinary');
+    final target = version?.trim() ?? '';
+    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+      'downloadBinary',
+      target.isEmpty ? null : {'version': target},
+    );
     return EbpfBinaryStatus.fromMap(raw);
   }
 
@@ -127,28 +132,28 @@ class EbpfSupportStatus {
   final bool binaryReady;
   final bool supported;
   final bool cgroup;
-  final bool tc;
+  final bool socketAssign;
   final String runtimeDir;
   final String kernelRelease;
   final String binaryVersion;
   final int checkedAt;
   final String result; // not_ready | no_root | preflight_passed | unsupported | inconclusive
   final List<String> cgroupReasons;
-  final List<String> tcReasons;
+  final List<String> socketAssignReasons;
 
   const EbpfSupportStatus({
     this.root = false,
     this.binaryReady = false,
     this.supported = false,
     this.cgroup = false,
-    this.tc = false,
+    this.socketAssign = false,
     this.runtimeDir = '',
     this.kernelRelease = '',
     this.binaryVersion = '',
     this.checkedAt = 0,
     this.result = 'not_ready',
     this.cgroupReasons = const [],
-    this.tcReasons = const [],
+    this.socketAssignReasons = const [],
   });
 
   factory EbpfSupportStatus.fromMap(Map<dynamic, dynamic>? map) {
@@ -161,14 +166,15 @@ class EbpfSupportStatus {
       binaryReady: map['binaryReady'] as bool? ?? false,
       supported: map['supported'] as bool? ?? false,
       cgroup: map['cgroup'] as bool? ?? false,
-      tc: map['tc'] as bool? ?? false,
+      // 兼容旧 support.json 的 tc 字段
+      socketAssign: (map['socketAssign'] ?? map['tc']) as bool? ?? false,
       runtimeDir: map['runtimeDir'] as String? ?? '',
       kernelRelease: map['kernelRelease'] as String? ?? '',
       binaryVersion: map['binaryVersion'] as String? ?? '',
       checkedAt: map['checkedAt'] as int? ?? 0,
       result: map['result'] as String? ?? 'not_ready',
       cgroupReasons: strList(map['cgroupReasons']),
-      tcReasons: strList(map['tcReasons']),
+      socketAssignReasons: strList(map['socketAssignReasons'] ?? map['tcReasons']),
     );
   }
 
@@ -179,8 +185,9 @@ class EbpfSupportStatus {
   DateTime? get checkedTime =>
       checkedAt > 0 ? DateTime.fromMillisecondsSinceEpoch(checkedAt) : null;
 
-  /// 失败原因（优先 cgroup，其次 tc）
-  List<String> get reasons => cgroupReasons.isNotEmpty ? cgroupReasons : tcReasons;
+  /// 失败原因（优先 cgroup，其次 socket_assign；旧 support.json 的 tcReasons 已兼容读取）
+  List<String> get reasons =>
+      cgroupReasons.isNotEmpty ? cgroupReasons : socketAssignReasons;
 }
 
 /// 二进制信息（对应原生 BinaryStatus）
@@ -232,6 +239,7 @@ class EbpfBinaryUpdateInfo {
   final String downloadUrl; // 已按当前 ABI 拼好
   final String changelogUrl;
   final String error; // 非空表示检查失败
+  final List<String> versions; // 可选下载版本（原生版本清单，可能为空）
 
   const EbpfBinaryUpdateInfo({
     this.latestVersion = '',
@@ -239,6 +247,7 @@ class EbpfBinaryUpdateInfo {
     this.downloadUrl = '',
     this.changelogUrl = '',
     this.error = '',
+    this.versions = const [],
   });
 
   factory EbpfBinaryUpdateInfo.fromMap(Map<dynamic, dynamic>? map) {
@@ -249,7 +258,18 @@ class EbpfBinaryUpdateInfo {
       downloadUrl: map['downloadUrl'] as String? ?? '',
       changelogUrl: map['changelogUrl'] as String? ?? '',
       error: map['error'] as String? ?? '',
+      versions: _versionsOf(map['versions']),
     );
+  }
+
+  /// 版本清单容错解析：只接受字符串，trim 后非空；非 List/空值/数字等一律忽略
+  static List<String> _versionsOf(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<String>()
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
   bool get ok => error.isEmpty && latestVersion.isNotEmpty;

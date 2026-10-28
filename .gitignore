@@ -52,3 +52,5 @@ pubspec.lock
 .fvm/
 /arms_cache
 .vscode
+.tmp
+/dist

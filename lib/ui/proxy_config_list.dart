@@ -133,12 +133,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     if (isAdd) {
       for (var item in _dataLists) {
         if (item['proxyName'] == data['proxyName']) {
-          item['proxyName'] = data['proxyName'];
-          item['proxyType'] = data['proxyType'];
-          item['proxyHost'] = data['proxyHost'];
-          item['proxyPort'] = data['proxyPort'];
-          item['proxyUser'] = data['proxyUser'];
-          item['proxyPass'] = data['proxyPass'];
+          // 编辑保存：**以表单数据整条合并**（含 eBPF 可调项 ebpf*）。
+          // 以前只挑 6 个旧字段拷贝，导致 ebpfNetwork 等新字段被丢掉，
+          // 表现为「设置了仅 TCP，下次进来又变回 TCP+UDP」
+          item.addAll(data);
           break;
         }
       }
@@ -157,11 +155,15 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   // 删除列表中的代理配置
-  void deletetoProxyConfig(Map<String, dynamic> data) {
-    _dataLists.removeWhere((item) => item['proxyName'] == data['proxyName']);
-    _proxyConfigData.deleteProxyConfig(_dataLists);
+  Future<void> deletetoProxyConfig(Map<String, dynamic> data) async {
+    final name = (data['proxyName'] ?? '').toString();
+    _dataLists.removeWhere((item) => item['proxyName'] == name);
+    await _proxyConfigData.deleteProxyConfig(_dataLists);
+    // 配置删除后清理设置侧 eBPF 标记，避免同名配置重新添加时继承旧开关
+    await AppSetings.setEbpfProfile(name, false);
+    if (!mounted) return;
     setState(() {
-      debugPrint('delete data: $_dataLists _dataLists lenth:${_dataLists.length}');
+      debugPrint('delete data: $_dataLists _dataLists lenth:${_dataLists.length} clearEbpf=$name');
     });
   }
 
@@ -214,7 +216,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
           );
         });
     if (isDelete) {
-      deletetoProxyConfig(data);
+      await deletetoProxyConfig(data);
     }
   }
 
@@ -274,14 +276,41 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     // 2) 互斥：VPN(tun2socks) 正在跑就先停掉（两条链路不能同时接管流量）
     await _stopOtherEngine("ebpf");
 
-    // 3) 生成 config.json：outbounds 完全跟随本条配置（type/host/port/user/pass）
+    // 3) 生成 config.json：outbounds 完全跟随本条配置（type/host/port/user/pass），
+    //    数据面 / 接管网络 / DNS 等 eBPF 可调项也在该配置里（跟随备份/恢复）
     final selfPackage = (await PackageInfo.fromPlatform()).packageName;
-    final configJson = EbpfConfigGenerator.build(
-      proxy: data,
-      packageList: appProxyPackageList.getList(),
-      selfPackage: selfPackage,
-      dataPlane: await AppSetings.getEbpfDataPlane(),
-    );
+    // 兼容旧配置，并让数据面跟随本机能力：
+    //  - 旧值 tc → socket_assign（新版二进制已移除 tc，启动会 FATAL 退出）
+    //  - 显式选择但本机不支持 → 回退到另一个可用数据面
+    //  - 空值 → 交给生成器按能力选择（cgroup 优先，其次 socket_assign）
+    final configData = Map<String, dynamic>.from(data);
+    var plane = (configData['ebpfDataPlane'] ?? '').toString().trim().toLowerCase();
+    if (plane == 'tc') {
+      plane = 'socket_assign';
+      configData['ebpfDataPlane'] = plane;
+      debugPrint('_startEbpfProxy: 旧数据面 tc 改为 socket_assign');
+    }
+    if (plane == 'socket_assign' && !support.socketAssign && support.cgroup) {
+      configData['ebpfDataPlane'] = 'cgroup';
+      debugPrint('_startEbpfProxy: 本机不支持 socket_assign 数据面，已回退 cgroup');
+    } else if (plane == 'cgroup' && !support.cgroup && support.socketAssign) {
+      configData['ebpfDataPlane'] = 'socket_assign';
+      debugPrint('_startEbpfProxy: 本机不支持 cgroup 数据面，已回退 socket_assign');
+    }
+    // 生成配置：proxyType/host/port/数据面非法时生成器抛错，给用户明确提示
+    late final String configJson;
+    try {
+      configJson = EbpfConfigGenerator.build(
+        proxy: configData,
+        packageList: appProxyPackageList.getList(),
+        selfPackage: selfPackage,
+        cgroupSupported: support.cgroup,
+        socketAssignSupported: support.socketAssign,
+      );
+    } on ArgumentError catch (e) {
+      await _showConfigError(e.message?.toString() ?? '$e');
+      return;
+    }
 
     // 4) 启动（原生会部署二进制 + 写 config + root 起进程 + 看门狗）
     try {
@@ -316,6 +345,25 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         _runningEngine = "";
       });
     }
+  }
+
+  /// 配置生成失败（参数非法 / 数据面不可用）时弹出错误。
+  /// 生成器抛出的异常不能从 async void 里逃出去，否则只会看到一条未捕获异常日志。
+  Future<void> _showConfigError(String message) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(S.of(ctx).ebpf_start_failed),
+        content: SingleChildScrollView(child: Text(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(S.of(ctx).text_confirm),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 关闭代理：按当前运行的引擎调对应通道

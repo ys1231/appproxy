@@ -36,8 +36,9 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
   bool _checking = false; // 检测中（按钮 loading）
   bool _downloading = false; // 下载中
   int _percent = 0;
-  String _dataPlane = 'cgroup';
   String _downloadBase = '';
+  // 用户选择的二进制版本；null = 最新（默认）
+  String? _selectedVersion;
 
   /// 有新版：已知最新版本，且与本地「下载来源版本」不同
   bool get _hasUpdate =>
@@ -73,7 +74,6 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
 
   /// 首次加载：设置项 + 缓存状态 + 版本清单（都不执行 root 命令）
   Future<void> _loadAll() async {
-    _dataPlane = await AppSetings.getEbpfDataPlane();
     _downloadBase = await AppSetings.getEbpfDownloadBase();
     await _loadCache();
     await _checkUpdate();
@@ -132,27 +132,85 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
   }
 
   /// 下载或续传二进制；失败时提示并刷新状态（保留进度以便再点继续）
+  ///
+  /// [_selectedVersion] 非空时下载指定版本，否则下载最新版本。
   Future<void> _download() async {
     if (_downloading) return;
+    final version = _selectedVersion;
     setState(() {
       _downloading = true;
       _percent = 0;
     });
     try {
-      final binary = await EbpfProxyData.downloadBinary();
+      final binary = await EbpfProxyData.downloadBinary(version: version);
       if (!mounted) return;
       setState(() => _binary = binary);
       // 下载成功后会记录来源版本，刷新一次版本信息（有新版提示随之消失）
       await _checkUpdate();
     } catch (e) {
       if (mounted) {
-        // 中断时保留进度：提示可再次点击续传
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        // 中断时保留进度：提示可再次点击续传；失败信息带上目标版本号
+        final target = version ?? _updateInfo.latestVersion;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(target.isEmpty
+              ? '$e'
+              : '${S.of(context).ebpf_version_target}: $target\n$e'),
+        ));
         await _loadCache();
       }
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
+  }
+
+  /// 版本选择弹窗：列出版本清单，标记当前已下载版本与最新版本。
+  /// 选中后关闭弹窗并更新 [_selectedVersion]（null 表示最新）。
+  Future<void> _selectVersion() async {
+    final versions = _updateInfo.versions;
+    if (versions.isEmpty) return;
+    final s = S.of(context);
+    final current = _binary.packageVersion;
+    final latest = _updateInfo.latestVersion;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(s.ebpf_select_version_title),
+        children: [
+          for (final v in versions)
+            SimpleDialogOption(
+              onPressed: () {
+                setState(() => _selectedVersion = v);
+                Navigator.of(ctx).pop();
+              },
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      v,
+                      style: TextStyle(
+                        fontWeight: v == _selectedVersion ? FontWeight.bold : null,
+                      ),
+                    ),
+                  ),
+                  if (v == current)
+                    Text(' ${s.ebpf_current_version}',
+                        style: const TextStyle(fontSize: 11.0, color: Colors.green)),
+                  if (v == latest)
+                    Text(' ${s.ebpf_latest_version}',
+                        style: const TextStyle(fontSize: 11.0, color: Colors.blueGrey)),
+                ],
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 8.0),
+            child: Text(
+              s.ebpf_old_version_warn,
+              style: TextStyle(fontSize: 11.0, color: Colors.orange[800]),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 自定义下载源（留空 = 官方地址）
@@ -269,17 +327,17 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
     );
   }
 
-  /// 切换数据面（cgroup 默认 / tc 退路），存设置侧
-  void _setDataPlane(String plane) {
-    setState(() => _dataPlane = plane);
-    AppSetings.setEbpfDataPlane(plane);
-  }
-
   /// 下载行文案：下载中百分比 → 继续下载（未下完）→ 下载 → 更新到 vX → 重新下载
+  /// 指定了非最新版本时按所选版本下载，不显示「更新到最新」，避免文案与实际行为矛盾。
   String _downloadLabel(S s) {
     if (!_binary.exists && _binary.pendingBytes > 0) return s.ebpf_resume;
     if (!_binary.exists) return s.ebpf_download;
-    if (_hasUpdate) return '${s.ebpf_update_to} ${_updateInfo.latestVersion}';
+    if (_hasUpdate) {
+      if (_selectedVersion != null && _selectedVersion != _updateInfo.latestVersion) {
+        return s.ebpf_redownload;
+      }
+      return '${s.ebpf_update_to} ${_updateInfo.latestVersion}';
+    }
     return s.ebpf_redownload;
   }
 
@@ -309,7 +367,7 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
                     _statusLine(s.ebpf_label_root, _support.root, s),
                     _statusLine(s.ebpf_label_binary, _support.binaryReady, s),
                     _statusLine(s.ebpf_label_cgroup, _support.cgroup, s),
-                    _statusLine(s.ebpf_label_tc, _support.tc, s),
+                    _statusLine(s.ebpf_label_socket_assign, _support.socketAssign, s),
                     if (_support.kernelRelease.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4.0),
@@ -387,6 +445,13 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
                             child: Text(s.ebpf_changelog, style: const TextStyle(fontSize: 12.0)),
                           ),
                         const Spacer(),
+                        // 版本选择放在「重新下载」按钮前面；原生未提供版本清单时不显示
+                        if (_updateInfo.versions.isNotEmpty)
+                          TextButton(
+                            onPressed: _downloading ? null : _selectVersion,
+                            child: Text(s.ebpf_select_version,
+                                style: const TextStyle(fontSize: 12.0)),
+                          ),
                         TextButton(
                           onPressed: _downloading ? null : _download,
                           child: Text(_downloading
@@ -399,40 +464,9 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
                 ),
               ),
             ),
-            // ---------------- 数据面 ----------------
-            _sectionHeader(s.ebpf_sec_plane),
-            Card(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(10.0, 10.0, 10.0, 10.0),
-                width: MediaQuery.of(context).size.width,
-                // 说明文字在上、靠左；两个选项在下面、靠右
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(s.ebpf_plane_hint,
-                        textAlign: TextAlign.left, style: const TextStyle(fontSize: 11.0)),
-                    const SizedBox(height: 6.0),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        ChoiceChip(
-                          label: Text(s.ebpf_plane_default),
-                          selected: _dataPlane == 'cgroup',
-                          onSelected: (v) => _setDataPlane('cgroup'),
-                        ),
-                        const SizedBox(width: 6.0),
-                        ChoiceChip(
-                          label: Text(s.ebpf_plane_compat),
-                          selected: _dataPlane == 'tc',
-                          onSelected: (v) => _setDataPlane('tc'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
             // ---------------- 高级 ----------------
+            // 注：数据面（cgroup / tc）不在这里选 —— 它属于每条代理配置的自定义参数，
+            // 已移到「编辑配置」页并写进 proxyConfig.json（跟随备份/恢复）。
             _sectionHeader(s.ebpf_sec_advanced),
             _rowCard(
               label: s.ebpf_download_base,
@@ -456,7 +490,7 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
     );
   }
 
-  /// 版本行：当前版本（来源包版本）· sing-box 自身版本 · 最新版本
+  /// 版本行：当前版本（来源包版本）· sing-box 自身版本 · 目标版本 · 最新版本
   String _versionLine(S s) {
     final parts = <String>[];
     if (_binary.exists) {
@@ -464,6 +498,10 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
           '${_binary.packageVersion.isEmpty ? "?" : _binary.packageVersion}');
       final singBox = _binary.version.split('\n').first.trim();
       if (singBox.isNotEmpty) parts.add(singBox);
+    }
+    // 目标版本：仅当用户选择的版本不是最新版本时显示
+    if (_selectedVersion != null && _selectedVersion != _updateInfo.latestVersion) {
+      parts.add('${s.ebpf_version_target}: $_selectedVersion');
     }
     if (_updateInfo.ok) {
       parts.add('${s.ebpf_latest_version}: ${_updateInfo.latestVersion}'

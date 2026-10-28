@@ -49,10 +49,16 @@ class MainActivity : FlutterActivity() {
     private var isMcpBind: Boolean = false
     // eBPF(sing-box) 引擎：与原 VPN 通道完全独立
     private var ebpfChannelHandler: EbpfChannelHandler? = null
+    /**
+     * VPN 授权弹窗期间挂起的 startVpn 结果：
+     * 未授权时不能立即回写 Result，否则 Flutter 侧会误以为 VPN 已启动；等 onActivityResult
+     * 拿到用户选择后再启动并回写。同一时刻只允许一个挂起请求。
+     */
+    private var pendingVpnStartResult: MethodChannel.Result? = null
     // 使用 lateinit 延迟初始化
     private lateinit var receiver: AppChangeReceiver
 
-    /** 入口：绑定 VPN 服务与 MCP 前台服务、注册应用安装/卸载广播、检查 VPN 与通知权限 */
+    /** 入口：绑定 VPN 服务与 MCP 前台服务、注册应用安装/卸载广播、检查通知权限 */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         intentVpnService = Intent(this, IyueVPNService::class.java)
@@ -96,7 +102,9 @@ class MainActivity : FlutterActivity() {
         if (bindService(mcpServiceIntent, mcpConn!!, Context.BIND_AUTO_CREATE)) {
             isMcpBind = true
         }
-        checkVpnPermission()
+        // 只检查通知权限；VPN 授权延后到用户真正启动 tun2socks 引擎时再请求
+        //（启动即 prepare 会拉起系统 VPN 授权弹窗，打断/抢占设备上其它 VPN）
+        checkNotificationPermission()
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -194,11 +202,16 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startVpn" -> {
                     try {
-                        currentProxy = call.arguments<Map<String, Any>>()
-                        checkVpnPermission()
-                        startVpnService()
-                        result.success(iyueVpnService?.isRunning())
+                        if (pendingVpnStartResult != null) {
+                            // 已有授权请求在途：直接失败，避免同一个 Result 被多次回写
+                            result.error("-1", "VPN 授权请求正在进行中，请稍候", null)
+                        } else {
+                            currentProxy = call.arguments<Map<String, Any>>()
+                            requestVpnPermission(result)
+                        }
                     } catch (e: Exception) {
+                        // 异常时清理挂起状态，否则后续 startVpn 会一直被拒
+                        pendingVpnStartResult = null
                         result.error("-1", e.message, null)
                     }
                 }
@@ -284,12 +297,11 @@ class MainActivity : FlutterActivity() {
     private val VPN_REQUEST_CODE = 100
     private val REQUEST_NOTIFICATION_PERMISSION = 1231
     /**
-     * 检查两类权限，缺哪个就弹哪个：
-     *   1. 通知权限（Android 13+）：前台服务要挂通知，没有通知权限会显示不出来
-     *   2. VPN 授权（VpnService.prepare）：返回非 null 说明用户还没同意过，需要拉起系统弹窗，
-     *      结果在 onActivityResult(VPN_REQUEST_CODE) 里回
+     * 通知权限（Android 13+）：前台服务要挂通知，没有通知权限通知会显示不出来。
+     *
+     * 只在 App 启动时检查；**不涉及 VPN 授权**（见 [requestVpnPermission]）。
      */
-    private fun checkVpnPermission() {
+    private fun checkNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     this,
@@ -303,27 +315,59 @@ class MainActivity : FlutterActivity() {
                 )
             } else {
                 // 权限已被授予
-                Log.d(TAG, "onCreate: 通知权限已授予!")
+                Log.d(TAG, "checkNotificationPermission: 通知权限已授予!")
             }
-        }
-        // 准备建立 VPN 连接 检测用户是否同意
-        val intent = VpnService.prepare(context)
-        if (intent != null) {
-            this.startActivityForResult(intent, VPN_REQUEST_CODE)
         }
     }
 
-    /** VPN 授权弹窗的回调：用户同意/拒绝（拒绝时目前只记日志） */
+    /**
+     * VPN 授权 + 启动 tun2socks（授权结果需要异步续接）：
+     *   - 已授权（prepare 返回 null）：立即 [startVpnService] 并回写结果；
+     *   - 未授权：把 MethodChannel.Result 挂起（[pendingVpnStartResult]），拉起系统授权弹窗，
+     *     等 onActivityResult(VPN_REQUEST_CODE) 里再启动并回写结果。
+     *
+     * 注意：调用方（startVpn 通道分支）已先设置 currentProxy，并保证没有在途的挂起请求。
+     */
+    private fun requestVpnPermission(result: MethodChannel.Result) {
+        val intent = VpnService.prepare(context)
+        if (intent == null) {
+            // 已授权：直接启动并返回运行状态
+            startVpnService()
+            result.success(iyueVpnService?.isRunning())
+            return
+        }
+        // 未授权：挂起结果，等用户操作后由 onActivityResult 续接（不能在这里先返回）
+        pendingVpnStartResult = result
+        this.startActivityForResult(intent, VPN_REQUEST_CODE)
+    }
+
+    /** VPN 授权弹窗的回调：续接被挂起的 startVpn 请求（同意 → 启动；拒绝 → 返回 false） */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_REQUEST_CODE) {
+            val pending = pendingVpnStartResult
+            pendingVpnStartResult = null
+            if (pending == null) {
+                // 进程重建等异常情况下没有挂起请求：不启动 VPN，避免用空 currentProxy 启动
+                Log.w(TAG, "onActivityResult: 没有挂起的 startVpn 请求，忽略")
+                return
+            }
             if (resultCode == Activity.RESULT_OK) {
-                // 用户授权成功
+                // 用户授权成功：启动并回写挂起的结果。
+                // 启动异常也必须回写（且只回写一次），否则挂起的 MethodChannel 结果永远
+                // 得不到回复，Flutter 侧会一直等待。
                 Log.d(TAG, "onActivityResult: 用户授权成功")
+                try {
+                    startVpnService()
+                    pending.success(iyueVpnService?.isRunning())
+                } catch (e: Exception) {
+                    Log.e(TAG, "onActivityResult: startVpnService failed: ${e.message}", e)
+                    pending.success(false)
+                }
             } else {
-                // 用户拒绝授权，处理相应逻辑
-                Log.d(TAG, "onActivityResult: 用户拒绝授权 ")
-                // 在这里可以通知Flutter层授权失败 TODO
+                // 用户拒绝授权：明确回失败，避免 Flutter 侧一直等待
+                Log.d(TAG, "onActivityResult: 用户拒绝授权")
+                pending.success(false)
             }
         }
     }
