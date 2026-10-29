@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:app_settings/app_settings.dart';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/data/ebpf_config_generator.dart';
+import 'package:appproxy/data/ebpf_options.dart';
 import 'package:appproxy/data/ebpf_proxy_data.dart';
 import 'package:appproxy/data/proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
@@ -135,7 +136,13 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         if (item['proxyName'] == data['proxyName']) {
           // 编辑保存：**以表单数据整条合并**（含 eBPF 可调项 ebpf*）。
           // 以前只挑 6 个旧字段拷贝，导致 ebpfNetwork 等新字段被丢掉，
-          // 表现为「设置了仅 TCP，下次进来又变回 TCP+UDP」
+          // 表现为「设置了仅 TCP，下次进来又变回 TCP+UDP」；
+          // 反过来「改成默认 = 表单不携带该键」时也要先把旧键删掉，
+          // 否则旧的 ebpfDnsMode 等会残留继续生效（改成默认却没变回去）。
+          item.removeWhere((key, _) =>
+              EbpfAdvancedOptions.storageKeys.contains(key) ||
+              key == 'ebpfDataPlane' ||
+              key == 'ebpfNetwork');
           item.addAll(data);
           break;
         }

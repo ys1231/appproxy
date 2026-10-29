@@ -379,12 +379,12 @@ class MCPServer private constructor(
      * 从 Flutter 的 proxyConfig.json 读取某条代理配置已保存的 eBPF 可调项。
      *
      * 为什么需要它：MCP 的 update_proxy_config 是「停旧进程 → 用新参数重建配置 → 再启动」，
-     * 调用方通常只改地址/账号，不会重复传 ebpfNetwork/ebpfDataPlane。若不继承旧值，
+     * 调用方通常只改地址/账号，不会重复传 ebpfNetwork/ebpfDataPlane 与高级选项。若不继承旧值，
      * 生成器会回落到默认值（例如 http 默认按新规则取 all），接管范围会被悄悄改掉。
      *
      * 文件位置：Dart 的 `getApplicationDocumentsDirectory()` 在 Android 上映射为
      * `context.getDir("flutter", MODE_PRIVATE)`（app_flutter 目录）；这里再兼容 filesDir /
-     * dataDir 两种历史布局。文件不存在或解析失败时安静返回 (null, null)。
+     * dataDir 两种历史布局。文件不存在或解析失败时安静返回 null。
      *
      * 选择顺序：显式传了 proxyName 时**只按名称精确匹配**，未命中直接不继承（不拿 host/单条
      * 兜底去猜，避免把别的配置的 eBPF 参数套过来）；未传时按 请求里的 host+port 匹配（单条）
@@ -394,14 +394,14 @@ class MCPServer private constructor(
         proxyName: String?,
         proxyHost: String,
         proxyPort: String,
-    ): Pair<String?, String?> {
-        val file = proxyConfigFile() ?: return null to null
+    ): Map<String, String>? {
+        val file = proxyConfigFile() ?: return null
         return try {
             val entries = JsonParser.parseString(file.readText()).asJsonArray
                 .mapNotNull { it as? JsonObject }
             val picked = if (proxyName != null) {
                 // 显式指定名称却未命中：直接不继承，不用 host/单条兜底猜测
-                entries.firstOrNull { it.stringValue("proxyName") == proxyName } ?: return null to null
+                entries.firstOrNull { it.stringValue("proxyName") == proxyName } ?: return null
             } else {
                 entries.filter {
                     it.stringValue("proxyHost") == proxyHost &&
@@ -409,15 +409,22 @@ class MCPServer private constructor(
                 }.singleOrNull()
                     ?: entries.filter { it.stringValue("proxyHost") == proxyHost }.singleOrNull()
                     ?: entries.singleOrNull()
+            } ?: return null
+            // 继承所有 ebpf* 可调项（含高级选项），保持「局部更新不重置流量策略」的语义
+            val keys = listOf(
+                "ebpfNetwork", "ebpfDataPlane",
+                "ebpfDnsMode", "ebpfDnsServers", "ebpfDnsStrategy", "ebpfDnsRoute",
+                "ebpfIpv6", "ebpfBypassPrivate", "ebpfUdpTimeout", "ebpfBypassPorts",
+                "ebpfHttpUdpAction", "ebpfCustomJson",
+            )
+            val out = mutableMapOf<String, String>()
+            for (key in keys) {
+                picked.stringValue(key)?.let { out[key] = it }
             }
-            if (picked == null) {
-                null to null
-            } else {
-                picked.stringValue("ebpfNetwork") to picked.stringValue("ebpfDataPlane")
-            }
+            out
         } catch (e: Exception) {
             Log.w(TAG, "readStoredEbpfOptions: ${e.message}")
-            null to null
+            null
         }
     }
 
@@ -585,6 +592,32 @@ class MCPServer private constructor(
                             add("socket_assign")
                         })
                     }
+                    putJsonObject("ebpfDnsMode") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: DNS capture mode. Default 'respect_policy' = only watched apps' DNS; 'hijack' = all apps' DNS (affects unwatched apps); 'off' = do not capture DNS (stays system-direct)"
+                        )
+                        put("enum", buildJsonArray {
+                            add("respect_policy")
+                            add("hijack")
+                            add("off")
+                        })
+                    }
+                    putJsonObject("ebpfDnsServers") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: JSON array of custom DNS servers, e.g. '[{\"type\":\"https\",\"server\":\"dns.alidns.com\",\"detour\":\"proxy\"}]'. Types: https/tls/quic/udp/local; detour: proxy/direct. Empty/absent = system resolver (direct)."
+                        )
+                    }
+                    putJsonObject("ebpfCustomJson") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: custom JSON object deep-merged into the final config.json (arrays replaced wholly). Last-resort override for any sing-box field; a bad config may fail to start."
+                        )
+                    }
                 },
                 required = listOf("proxyHost", "proxyPort", "proxyType", "proxyName")
             ),
@@ -655,6 +688,9 @@ class MCPServer private constructor(
                     // 与编辑配置页写入 proxyConfig.json 的键保持一致
                     request.arguments?.get("ebpfNetwork")?.jsonPrimitive?.content?.let { put("ebpfNetwork", it) }
                     request.arguments?.get("ebpfDataPlane")?.jsonPrimitive?.content?.let { put("ebpfDataPlane", it) }
+                    request.arguments?.get("ebpfDnsMode")?.jsonPrimitive?.content?.let { put("ebpfDnsMode", it) }
+                    request.arguments?.get("ebpfDnsServers")?.jsonPrimitive?.content?.let { put("ebpfDnsServers", it) }
+                    request.arguments?.get("ebpfCustomJson")?.jsonPrimitive?.content?.let { put("ebpfCustomJson", it) }
                 }
                 Log.d(TAG, "start_proxy config: ${maskSecrets(config)}")
 
@@ -861,7 +897,7 @@ class MCPServer private constructor(
                         put("type", "string")
                         put(
                             "description",
-                            "Optional: name of the proxy configuration. Used to find its saved ebpfNetwork/ebpfDataPlane in proxyConfig.json when those are not passed explicitly."
+                            "Optional: name of the proxy configuration. Used to find its saved ebpfNetwork/ebpfDataPlane and advanced eBPF options in proxyConfig.json when those are not passed explicitly."
                         )
                     }
                     putJsonObject("ebpfNetwork") {
@@ -886,6 +922,27 @@ class MCPServer private constructor(
                             add("cgroup")
                             add("socket_assign")
                         })
+                    }
+                    putJsonObject("ebpfDnsMode") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: DNS capture mode ('respect_policy'/'hijack'/'off'). Omit to inherit the saved value."
+                        )
+                    }
+                    putJsonObject("ebpfDnsServers") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: JSON array of custom DNS servers. Omit to inherit the saved value (default: system resolver)."
+                        )
+                    }
+                    putJsonObject("ebpfCustomJson") {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "eBPF only: custom JSON object deep-merged into config.json. Omit to inherit the saved value."
+                        )
                     }
                 }
             )
@@ -937,21 +994,20 @@ class MCPServer private constructor(
                     request.arguments?.get("proxyEngine")?.jsonPrimitive?.content
                 if (ebpfController.getStatus() || proxyEngine == "ebpf") {
                     // eBPF 可调项：调用方没传时从 proxyConfig.json 的已有配置继承。
-                    // 否则「只改地址/账号」这种局部更新会把 ebpfNetwork/ebpfDataPlane 重置成
-                    // 生成器默认值：轻则接管范围被悄悄改掉，重则（设备只支持一种数据面）起不来。
-                    val ebpfNetworkArg = request.arguments?.get("ebpfNetwork")
-                        ?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                    val ebpfDataPlaneArg = request.arguments?.get("ebpfDataPlane")
-                        ?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    // 否则「只改地址/账号」这种局部更新会把 ebpfNetwork/ebpfDataPlane 与高级选项
+                    // 重置成生成器默认值：轻则接管范围被悄悄改掉，重则（设备只支持一种数据面）起不来。
                     val proxyNameArg = request.arguments?.get("proxyName")
                         ?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
                     val stored = readStoredEbpfOptions(proxyNameArg, proxyHost, proxyPort)
-                    val ebpfNetwork = ebpfNetworkArg ?: stored.first
-                    val ebpfDataPlane = ebpfDataPlaneArg ?: stored.second
+                        ?: emptyMap()
+                    // 显式传入的参数优先；缺省的按继承表补齐（空串视为未传）
+                    fun argOrStored(name: String): String? =
+                        request.arguments?.get(name)?.jsonPrimitive?.content
+                            ?.takeIf { it.isNotBlank() } ?: stored[name]
                     Log.d(
                         TAG,
-                        "update_proxy_config(ebpf): network=$ebpfNetwork dataPlane=$ebpfDataPlane " +
-                            "(stored network=${stored.first} dataPlane=${stored.second})"
+                        "update_proxy_config(ebpf): stored keys=${stored.keys} " +
+                            "network=${argOrStored("ebpfNetwork")} dataPlane=${argOrStored("ebpfDataPlane")}"
                     )
 
                     // 旧进程先停：否则新进程会和它抢内核附着/端口
@@ -965,9 +1021,16 @@ class MCPServer private constructor(
                         put("proxyUser", proxyUser)
                         put("proxyPass", proxyPass)
                         put("appProxyPackageList", appList)
-                        if (ebpfNetwork != null) put("ebpfNetwork", ebpfNetwork)
-                        if (ebpfDataPlane != null) put("ebpfDataPlane", ebpfDataPlane)
                         if (proxyNameArg != null) put("proxyName", proxyNameArg)
+                        // 所有 ebpf* 可调项（含高级选项）：显式传入或继承的旧值
+                        for (key in listOf(
+                            "ebpfNetwork", "ebpfDataPlane",
+                            "ebpfDnsMode", "ebpfDnsServers", "ebpfDnsStrategy", "ebpfDnsRoute",
+                            "ebpfIpv6", "ebpfBypassPrivate", "ebpfUdpTimeout", "ebpfBypassPorts",
+                            "ebpfHttpUdpAction", "ebpfCustomJson",
+                        )) {
+                            argOrStored(key)?.let { put(key, it) }
+                        }
                     }
                     val result = ebpfController.start(ebpfConfig)
                     Log.i(TAG, "Proxy(ebpf) update result: $result")

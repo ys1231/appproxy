@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:appproxy/data/common.dart';
+import 'package:appproxy/data/ebpf_options.dart';
 import 'package:appproxy/data/ebpf_proxy_data.dart';
 import 'package:appproxy/events/debounce.dart';
 import 'package:appproxy/generated/l10n.dart';
+import 'package:appproxy/ui/ebpf_options_page.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
@@ -67,6 +69,10 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
   // 这样切换代理类型时仍能保持「自动」语义。
   String _ebpfNetwork = '';
 
+  // eBPF 高级选项（接管/DNS/兼容/JSON 覆盖），在「eBPF 高级选项」二级页编辑。
+  // 空 = 全自动默认；所有键跟随 proxyConfig.json 备份/恢复。
+  EbpfAdvancedOptions _ebpfAdvanced = EbpfAdvancedOptions();
+
   /// 初始化：编辑态回填已有配置；读取本机检测缓存（决定 eBPF 开关能否点）
   @override
   void initState() {
@@ -90,8 +96,10 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
       final savedNetwork = (widget.onData['ebpfNetwork'] ?? '').toString().trim().toLowerCase();
       // 非法旧值按自动处理，避免下拉框拿到不存在的选项而断言失败
       _ebpfNetwork = const {'all', 'tcp', 'udp'}.contains(savedNetwork) ? savedNetwork : '';
+      // 高级选项（接管/DNS/兼容/JSON 覆盖）：非法值在模型内部已回落默认
+      _ebpfAdvanced = EbpfAdvancedOptions.fromProxyConfig(widget.onData);
       debugPrint('addproxy init: 回填 eBPF 可调项 dataPlane=$_ebpfDataPlane '
-          'network=$_ebpfNetwork');
+          'network=$_ebpfNetwork advancedDefault=${_ebpfAdvanced.isAllDefault}');
       isDefaultTitle = false;
     } else {
       isDefaultTitle = true;
@@ -200,6 +208,20 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 proxyConfig['ebpfDataPlane'] = _effectiveDataPlane;
                 // 网络：未手动选择时保存空串（自动），不要写按类型推导的显式值
                 proxyConfig['ebpfNetwork'] = _ebpfNetwork;
+                // 高级选项：只写有内容的键（空 = 自动 = 不存），保持配置最小化；
+                // 自定义 JSON 非法时提前拦截（生成器会再校验一次，这里给用户即时反馈）
+                final customJson = _ebpfAdvanced.customJson.trim();
+                if (customJson.isNotEmpty) {
+                  try {
+                    _ebpfAdvanced.parseCustomOverride();
+                  } on FormatException {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(S.of(context).ebpf_adv_json_invalid),
+                        backgroundColor: Colors.purple.withValues(alpha: 0.4)));
+                    return;
+                  }
+                }
+                proxyConfig.addAll(_ebpfAdvanced.toProxyConfigEntries());
                 debugPrint('addproxy save: name=${_controller_proxyName.text} '
                     'type=${_controller_proxyType.text} ebpfEnabled=$_ebpfEnabled '
                     'dataPlane=$_effectiveDataPlane '
@@ -401,8 +423,59 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
               },
               onChanged: (v) => setState(() => _ebpfNetwork = v),
             ),
+            _ebpfAdvancedEntry(context),
           ],
         ],
+      ),
+    );
+  }
+
+  /// 「eBPF 高级选项」入口行：接管 / DNS / 兼容 / JSON 覆盖都在二级页编辑，
+  /// 保持本表单简洁；右侧副标题提示是否已自定义（默认 = 全部自动）。
+  Widget _ebpfAdvancedEntry(BuildContext context) {
+    final s = S.of(context);
+    return InkWell(
+      onTap: () async {
+        final result = await Navigator.push<EbpfAdvancedOptions>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EbpfAdvancedOptionsPage(
+              initial: _ebpfAdvanced,
+              proxyType: _controller_proxyType.text,
+            ),
+          ),
+        );
+        if (result != null) {
+          setState(() => _ebpfAdvanced = result);
+          debugPrint('addproxy: 高级选项已更新 default=${result.isAllDefault}');
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10.0, 4.0, 10.0, 6.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.ebpf_adv_entry, style: const TextStyle(fontSize: 13.0)),
+                  Text(
+                    _ebpfAdvanced.isAllDefault
+                        ? s.ebpf_adv_entry_default
+                        : s.ebpf_adv_entry_customized,
+                    style: TextStyle(
+                      fontSize: 11.0,
+                      color:
+                          _ebpfAdvanced.isAllDefault ? Colors.grey : Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 20.0, color: Colors.grey),
+          ],
+        ),
       ),
     );
   }

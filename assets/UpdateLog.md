@@ -1,3 +1,15 @@
+
+# 更新日志
+
+## v.3.2
+- feat(ebpf): DNS 与接管策略改为用户可配置的高级选项
+- 添加/修改配置页接管网络下方新增「eBPF 高级选项」二级页：接管(IPv6/私有地址/UDP 超时/绕过端口)、DNS(接管模式/服务器/策略/路由)、兼容(HTTP+UDP 处理/自定义 JSON 覆盖)
+- DNS 接管默认 respect_policy（只接管被监听 App），修复旧版 hijack 全局接管导致全机 DNS 查询涌入 sing-box、影响监听范围外 App 的问题
+- DNS 服务器默认系统应答（直连零额外请求）；支持内置池多选/手动添加，每台可选经代理/直连，多台自动包 group，DoH 自动补 local 解析器兜底
+- 最小化生成：sing-box 默认合理的字段一律不写，自定义 JSON 深度合并兜底
+- MCP start_proxy/update_proxy_config 继承并透传全部 ebpf* 键
+
+## v.3.1
 - feat(ebpf): 修复 http/socks5 代理链路并支持选择二进制版本
 - 修复 HTTP 上游不支持 UDP 时的 CONNECT-UDP 404：ebpf 默认接管 tcp+udp，
   HTTP 在路由层 reject 非 DNS UDP，SOCKS5 走 UDP ASSOCIATE
@@ -12,7 +24,7 @@
 - MCP 更新继承 ebpfNetwork/ebpfDataPlane，日志掩码账号密码
 - 设置页新增“选择版本”：从 update.json.versions 下载指定二进制版本
 - 清理配置页 HTTP+UDP 提示、无引用 l10n 与死代码
----
+## v.3.0
 - feat(ebpf): :fire: 集成eBPF透明代理支持并新增相关管理功能
 ---
 - feat(restore): :sparkles: #34 添加代理配置备份与还原功能
