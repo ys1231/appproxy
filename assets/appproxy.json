@@ -1,5 +1,5 @@
 {
-  "VersionName": "v0.3.1",
+  "VersionName": "v0.3.2",
   "ModifyContent": "\r\n- feat(ebpf): DNS 与接管策略改为用户可配置的高级选项\n- 添加/修改配置页接管网络下方新增「eBPF 高级选项」二级页：接管(IPv6/私有地址/UDP 超时/绕过端口)、DNS(接管模式/服务器/策略/路由)、兼容(HTTP+UDP 处理/自定义 JSON 覆盖)\n- DNS 接管默认 respect_policy（只接管被监听 App），修复旧版 hijack 全局接管导致全机 DNS 查询涌入 sing-box、影响监听范围外 App 的问题\n- DNS 服务器默认系统应答（直连零额外请求）；支持内置池多选/手动添加，每台可选经代理/直连，多台自动包 group，DoH 自动补 local 解析器兜底\n- 最小化生成：sing-box 默认合理的字段一律不写，自定义 JSON 深度合并兜底\n- MCP start_proxy/update_proxy_config 继承并透传全部 ebpf* 键",
   "DownloadUrl": "https://pfile.ys1231.cn/modules/appproxy/"
 }
