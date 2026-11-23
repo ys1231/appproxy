@@ -3,17 +3,27 @@ import 'dart:io';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/data/ebpf_options.dart';
 import 'package:appproxy/data/ebpf_proxy_data.dart';
+import 'package:appproxy/data/proxy_paste_profile.dart';
 import 'package:appproxy/events/debounce.dart';
 import 'package:appproxy/generated/l10n.dart';
 import 'package:appproxy/ui/ebpf_options_page.dart';
+import 'package:appproxy/ui/paste_import_page.dart';
 import 'package:flutter/material.dart';
 
 class AddProxyWidget extends StatefulWidget {
-  AddProxyWidget({super.key, required this.onDataFetched, required this.onData});
+  AddProxyWidget({
+    super.key,
+    required this.onDataFetched,
+    required this.onData,
+    this.existingNames = const [],
+  });
 
-  // 定义一个回调，用于处理读取到的数据
-  final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
+  // 定义一个回调，用于处理读取到的数据；oldName = 编辑前的配置名（改名时用于迁移关联状态）
+  final Function(Map<String, dynamic>, {bool isAdd, String? oldName}) onDataFetched;
   Map<String, dynamic> onData = {};
+
+  // 已存在的配置名（编辑时不含自己），用于保存前的重名校验
+  final List<String> existingNames;
 
   /// 创建 State
   @override
@@ -153,6 +163,37 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
     return plane;
   }
 
+  /// 打开粘贴识别页，识别成功后回填表单
+  Future<void> _openPasteImport() async {
+    final parsed = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(builder: (_) => const PasteImportPage()),
+    );
+    if (parsed == null || !mounted) return;
+    _applyPasteResult(parsed);
+  }
+
+  /// 把粘贴识别结果回填到表单（只覆盖解析出的字段，未解析的字段保持不变）
+  void _applyPasteResult(Map<String, String> parsed) {
+    void fill(String key, TextEditingController controller) {
+      final value = parsed[key];
+      if (value != null) controller.text = value;
+    }
+
+    setState(() {
+      fill(PasteField.name, _controller_proxyName);
+      fill(PasteField.type, _controller_proxyType);
+      fill(PasteField.host, _controller_proxyHost);
+      fill(PasteField.port, _controller_proxyPort);
+      fill(PasteField.user, _controller_proxyUser);
+      fill(PasteField.pass, _controller_proxyPass);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(S.of(context).paste_applied)),
+    );
+    debugPrint('addproxy: paste applied $parsed');
+  }
+
   /// 释放：销毁输入防抖计时器
   @override
   void dispose() {
@@ -171,6 +212,11 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
           backgroundColor: Theme.of(context).primaryColor,
           actions: [
             IconButton(
+              tooltip: S.of(context).paste_import_title,
+              icon: const Icon(Icons.content_paste_search),
+              onPressed: _openPasteImport,
+            ),
+            IconButton(
               padding: const EdgeInsets.only(right: 20.0),
               icon: const Icon(Icons.save),
               onPressed: () async {
@@ -183,6 +229,14 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                   debugPrint("proxyConfig:$proxyConfig");
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(S.of(context).text_check_parameters),
+                      backgroundColor: Colors.purple.withValues(alpha: 0.4)));
+                  return;
+                }
+                // 配置名唯一：改名/新增时不允许与其它配置重名
+                // （eBPF 标记、列表选中状态都按名称索引，重名会让两条配置互相干扰）
+                if (widget.existingNames.contains(proxyConfig['proxyName']!)) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(S.of(context).text_config_name_exists),
                       backgroundColor: Colors.purple.withValues(alpha: 0.4)));
                   return;
                 }
@@ -230,8 +284,9 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 // 必须 await：列表页返回后会立刻读这个值刷新徽标，不 await 会读到旧值（竞态）。
                 await AppSetings.setEbpfProfile(_controller_proxyName.text, _ebpfEnabled);
                 if (!mounted) return;
+                final oldName = (widget.onData['proxyName'] ?? '').toString();
                 if (widget.onData.isNotEmpty) {
-                  widget.onDataFetched(proxyConfig, isAdd: true);
+                  widget.onDataFetched(proxyConfig, isAdd: true, oldName: oldName);
                 } else {
                   widget.onDataFetched(proxyConfig);
                 }
@@ -250,20 +305,21 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
                 // 设置UI布局中子元素的主轴线对齐方式
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _openPasteImport,
+                      icon: const Icon(Icons.content_paste, size: 18.0),
+                      label: Text(S.of(context).paste_import_title),
+                    ),
+                  ),
+                  const SizedBox(height: 4.0),
                   TextField(
-                      readOnly: widget.onData.isNotEmpty,
                       controller: _controller_proxyName,
                       decoration: InputDecoration(
                         labelText: S.of(context).text_config_name,
                         border: const OutlineInputBorder(),
-                      ),
-                      onTap: () {
-                        if (widget.onData.isNotEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(S.of(context).text_config_cannot_be_modified),
-                              backgroundColor: Colors.purple.withOpacity(0.4)));
-                        }
-                      }),
+                      )),
                   const SizedBox(height: 20.0),
                   ProxyType(
                     controller: _controller_proxyType,

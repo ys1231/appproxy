@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:app_settings/app_settings.dart';
 import 'package:appproxy/data/common.dart';
 import 'package:appproxy/data/ebpf_config_generator.dart';
-import 'package:appproxy/data/ebpf_options.dart';
 import 'package:appproxy/data/ebpf_proxy_data.dart';
 import 'package:appproxy/data/proxy_config_data.dart';
 import 'package:appproxy/events/app_events.dart';
@@ -126,37 +125,37 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   }
 
   // 在这里处理从 AddProxyButton 返回的数据 添加代理配置到列表
-  void handleConfigData(Map<String, dynamic> data, {bool isAdd = false}) {
-    if (!isAdd && _dataLists.any((item) => item['proxyName'] == data['proxyName'])) {
-      debugPrint("handleConfigData Data already exists in the list, skipping.");
+  //
+  // [oldName] 仅编辑时有值：配置名允许修改后，按旧名定位原条目；
+  // 若名称变化，需要同步迁移设置侧的 eBPF 标记和当前选中名（两者都按名称索引）。
+  Future<void> handleConfigData(Map<String, dynamic> data,
+      {bool isAdd = false, String? oldName}) async {
+    final newName = (data['proxyName'] ?? '').toString();
+    // 列表合并/改名/重名判断都走纯函数，便于单测覆盖
+    final edit = ProxyConfigData.applyEdit(
+      _dataLists,
+      data,
+      oldName: isAdd ? (oldName ?? newName) : null,
+    );
+    if (!edit.ok) {
+      debugPrint("handleConfigData conflict: $newName");
       return;
     }
-    if (isAdd) {
-      for (var item in _dataLists) {
-        if (item['proxyName'] == data['proxyName']) {
-          // 编辑保存：**以表单数据整条合并**（含 eBPF 可调项 ebpf*）。
-          // 以前只挑 6 个旧字段拷贝，导致 ebpfNetwork 等新字段被丢掉，
-          // 表现为「设置了仅 TCP，下次进来又变回 TCP+UDP」；
-          // 反过来「改成默认 = 表单不携带该键」时也要先把旧键删掉，
-          // 否则旧的 ebpfDnsMode 等会残留继续生效（改成默认却没变回去）。
-          item.removeWhere((key, _) =>
-              EbpfAdvancedOptions.storageKeys.contains(key) ||
-              key == 'ebpfDataPlane' ||
-              key == 'ebpfNetwork');
-          item.addAll(data);
-          break;
-        }
+    _dataLists = edit.list;
+    if (edit.renamed) {
+      // 名称是 eBPF 标记与“当前选中”的索引键，改名必须同步迁移
+      _ebpfProfiles = await AppSetings.renameEbpfProfile(edit.sourceName, newName);
+      if (_isSelectedProxyName == edit.sourceName) {
+        _isSelectedProxyName = newName;
       }
-    } else {
-      _dataLists.add(data);
+      debugPrint("handleConfigData renamed: ${edit.sourceName} -> $newName");
     }
-    _proxyConfigData.addProxyConfig(_dataLists).then((value) {});
+    await _proxyConfigData.addProxyConfig(_dataLists);
     // 引擎标记存在设置侧：保存配置后重新读一次，否则列表徽标不会跟着变
-    AppSetings.getEbpfProfiles().then((profiles) {
-      if (!mounted) return;
-      setState(() => _ebpfProfiles = profiles);
-    });
+    final profiles = await AppSetings.getEbpfProfiles();
+    if (!mounted) return;
     setState(() {
+      _ebpfProfiles = profiles;
       debugPrint('Received data: $_dataLists _dataLists lenth:${_dataLists.length}');
     });
   }
@@ -241,6 +240,13 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     if (engine == "ebpf") {
       await _startEbpfProxy(data);
       return;
+    }
+    // VPN(VpnService) 只作用于当前 Android 用户，无法接管分身/工作资料里的应用；
+    // 选了这类包时先提示，避免用户以为分身也被代理了
+    final selectedPackages = appProxyPackageList.getList();
+    if (selectedPackages.isNotEmpty && multiUserPackages.intersects(selectedPackages)) {
+      final proceed = await _confirmMultiUserWithVpn();
+      if (!proceed) return;
     }
     // 互斥：eBPF 正在跑就先停掉
     await _stopOtherEngine("tun2socks");
@@ -395,6 +401,30 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
   }
 
+  /// 所选应用包含分身时，提示 VPN 引擎的系统限制
+  Future<bool> _confirmMultiUserWithVpn() async {
+    if (!mounted) return false;
+    final s = S.of(context);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.app_multi_user_vpn_warn_title),
+        content: Text(s.app_multi_user_vpn_warn),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.text_cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.app_multi_user_start_anyway),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   /// 互斥：要启动 [engine] 前，先把另一个正在运行的引擎停掉
   Future<void> _stopOtherEngine(String engine) async {
     if (_runningEngine.isEmpty || _runningEngine == engine) return;
@@ -495,9 +525,17 @@ class _ProxyListHomeState extends State<ProxyListHome> {
                   },
                   // 设置双击事件
                   onDoubleTap: () async {
+                    final otherNames = _dataLists
+                        .where((item) => item['proxyName'] != c_data['proxyName'])
+                        .map((item) => (item['proxyName'] ?? '').toString())
+                        .toList();
                     await Navigator.push(context,
                         MaterialPageRoute(builder: (BuildContext context) {
-                      return AddProxyWidget(onDataFetched: handleConfigData, onData: c_data);
+                      return AddProxyWidget(
+                        onDataFetched: handleConfigData,
+                        onData: c_data,
+                        existingNames: otherNames,
+                      );
                     }));
                     // 从表单返回后同步一次引擎标记（保存逻辑里也会刷新，这里兜底）
                     if (!mounted) return;
@@ -509,7 +547,12 @@ class _ProxyListHomeState extends State<ProxyListHome> {
           },
         );
       }),
-      floatingActionButton: AddProxyButton(onDataFetched: handleConfigData),
+      floatingActionButton: AddProxyButton(
+        onDataFetched: handleConfigData,
+        existingNames: _dataLists
+            .map((item) => (item['proxyName'] ?? '').toString())
+            .toList(),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -517,10 +560,17 @@ class _ProxyListHomeState extends State<ProxyListHome> {
 
 // 添加代理按钮
 class AddProxyButton extends StatelessWidget {
-  const AddProxyButton({super.key, required this.onDataFetched});
+  const AddProxyButton({
+    super.key,
+    required this.onDataFetched,
+    this.existingNames = const [],
+  });
 
   // 定义一个回调，用于处理读取到的数据
-  final Function(Map<String, dynamic>, {bool isAdd}) onDataFetched;
+  final Function(Map<String, dynamic>, {bool isAdd, String? oldName}) onDataFetched;
+
+  // 已存在的配置名（新增时用于重名校验）
+  final List<String> existingNames;
 
   /// 构建代理列表（每行：名称 + 引擎徽标 + 开关；长按删除、双击编辑）
   @override
@@ -533,8 +583,11 @@ class AddProxyButton extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) =>
-                    AddProxyWidget(onDataFetched: onDataFetched, onData: const {})),
+                builder: (context) => AddProxyWidget(
+                      onDataFetched: onDataFetched,
+                      onData: const {},
+                      existingNames: existingNames,
+                    )),
           );
         },
         child: Container(

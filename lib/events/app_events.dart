@@ -49,3 +49,21 @@ class AppProxyPackageList {
 }
 // 保存已选择的app
 AppProxyPackageList appProxyPackageList = AppProxyPackageList();
+
+/// 当前设备上存在"分身/多开"（同包名在其它 Android 用户里也有安装）的包名集合。
+/// 应用列表页扫描后刷新；启动 VPN 引擎时用于提示系统限制（VPN 无法接管其它用户）。
+class MultiUserPackages {
+  final Set<String> _packages = {};
+
+  void replace(Iterable<String> names) {
+    _packages
+      ..clear()
+      ..addAll(names);
+  }
+
+  bool intersects(Iterable<String> names) => names.any(_packages.contains);
+
+  Set<String> get all => {..._packages};
+}
+
+MultiUserPackages multiUserPackages = MultiUserPackages();

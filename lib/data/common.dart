@@ -148,4 +148,18 @@ class AppSetings {
     }
     await setEbpfProfiles(profiles);
   }
+
+  /// 配置改名时迁移 eBPF 标记（标记按配置名存储，不迁移会丢失开关/徽标）。
+  /// 返回迁移后的完整集合，调用方可直接刷新 UI。
+  static Future<Set<String>> renameEbpfProfile(String oldName, String newName) async {
+    if (oldName.isEmpty || newName.isEmpty || oldName == newName) {
+      return getEbpfProfiles();
+    }
+    final profiles = await _ebpfProfileSet();
+    if (profiles.remove(oldName)) {
+      profiles.add(newName);
+      await setEbpfProfiles(profiles);
+    }
+    return {...profiles};
+  }
 }

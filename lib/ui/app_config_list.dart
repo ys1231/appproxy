@@ -24,9 +24,11 @@ enum AppOption {
   showUserApp,
   // 系统app
   showSystemApp,
+  // 扫描分身/多开（隐藏用户，需要 root）
+  scanClones,
 }
 
-Future<List> invokeGetAppList(token) async {
+Future<List> invokeGetAppList(token, {bool includeRoot = false}) async {
   BackgroundIsolateBinaryMessenger.ensureInitialized(token);
   /**
    * 静态常量平台通道定义
@@ -34,8 +36,11 @@ Future<List> invokeGetAppList(token) async {
    * 它主要用于定义与原生平台通信的方法通道名称。
    */
   const platform = MethodChannel('cn.ys1231/appproxy');
-  // 远程调用获取应用列表
-  final appListString = await platform.invokeMethod('getAppList');
+  // 远程调用获取应用列表（includeRoot=true 时会额外枚举隐藏用户，可能请求 root）
+  final appListString = await platform.invokeMethod(
+    'getAppList',
+    {'includeRoot': includeRoot},
+  );
   List<dynamic> rawList = jsonDecode(appListString);
 
   // 处理每个应用的信息，包括 base64 解码
@@ -60,10 +65,11 @@ Future<List> invokeGetAppList(token) async {
   return processedList;
 }
 
-Future<List> getAppListInIsolate() async {
+Future<List> getAppListInIsolate({bool includeRoot = false}) async {
   RootIsolateToken rootIsolateToken = RootIsolateToken.instance!;
   // 其它线程获取应用列表
-  return Isolate.run(() => invokeGetAppList(rootIsolateToken));
+  return Isolate.run(
+      () => invokeGetAppList(rootIsolateToken, includeRoot: includeRoot));
 }
 
 class AppConfigState extends State<AppConfigList> {
@@ -92,6 +98,12 @@ class AppConfigState extends State<AppConfigList> {
 
   // 是否使用缓存数据
   bool _useCached = false;
+
+  // 是否已请求过扫描隐藏用户（分身/多开）；由右上角菜单主动触发，避免启动即弹 root
+  bool _scanRootClones = false;
+
+  // 包名 -> 出现在几个用户里（>1 表示有分身，勾选会联动）
+  Map<String, int> _packageUserCounts = {};
 
   // 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
   bool _showUserAppSelected = true;
@@ -189,6 +201,51 @@ class AppConfigState extends State<AppConfigList> {
     });
   }
 
+  /// 整理原生应用列表：**每个用户/分身单独一行**（不再按包名合并）。
+  ///
+  /// 同时统计“同包名出现在几个用户里”，用于在副标题提示勾选会联动；
+  /// 代理引擎仍以包名为粒度，所以同包名的多行会共享同一个勾选状态。
+  List<Map<String, dynamic>> _prepareAppList(List raw) {
+    final result = <Map<String, dynamic>>[];
+    final seen = <String>{};
+    final counts = <String, int>{};
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final pkg = (item['packageName'] ?? '').toString();
+      if (pkg.isEmpty) continue;
+      final userId = (item['userId'] as num?)?.toInt() ?? 0;
+      final key = '$userId/$pkg';
+      if (!seen.add(key)) continue;
+      final copy = Map<String, dynamic>.from(item);
+      copy['userId'] = userId;
+      copy['multiUser'] = item['multiUser'] == true;
+      result.add(copy);
+      counts[pkg] = (counts[pkg] ?? 0) + 1;
+    }
+    // 让同一包名的原应用/分身相邻显示，便于对照
+    result.sort((a, b) {
+      final byPkg = (a['packageName'] ?? '')
+          .toString()
+          .compareTo((b['packageName'] ?? '').toString());
+      if (byPkg != 0) return byPkg;
+      return ((a['userId'] as num?)?.toInt() ?? 0)
+          .compareTo((b['userId'] as num?)?.toInt() ?? 0);
+    });
+    _packageUserCounts = counts;
+    multiUserPackages.replace(result
+        .where((e) => e['multiUser'] == true)
+        .map((e) => e['packageName'].toString()));
+    debugPrint("prepareAppList: ${result.length} rows, multi-user pkgs=${multiUserPackages.all.length}");
+    return result;
+  }
+
+  /// 应用副标题：包名；同包名出现在多个用户时提示勾选联动
+  String _appSubtitle(S s, Map<String, dynamic> item) {
+    final pkg = (item['packageName'] ?? '').toString();
+    final count = _packageUserCounts[pkg] ?? 1;
+    return count > 1 ? '$pkg · ${s.app_same_package_linked}' : pkg;
+  }
+
   // 远程调用获取Android 应用列表
   Future<bool> getAppList() async {
     try {
@@ -197,7 +254,8 @@ class AppConfigState extends State<AppConfigList> {
         _cachedAppListInfo.clear();
         // 多线程获取应用列表
         debugPrint("iyue-> call  getAppListInIsolate");
-        _cachedAppListInfo = await getAppListInIsolate();
+        _cachedAppListInfo = _prepareAppList(
+            await getAppListInIsolate(includeRoot: _scanRootClones));
         debugPrint("iyue-> call  getAppListInIsolate end");
         // 获取之后使用缓存数据
         _useCached = true;
@@ -364,6 +422,17 @@ class AppConfigState extends State<AppConfigList> {
                         updateShowSystemApp(_showSystemAppSelected);
                         _selectAll = false;
                         break;
+                      case AppOption.scanClones:
+                        // 隐藏用户（应用分身/多开）只有 root 能枚举；
+                        // 只在用户主动选择时触发，避免打开 App 就弹授权框
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(S.of(context).text_scan_clones_hint)));
+                        setState(() {
+                          _scanRootClones = true;
+                          _useCached = false;
+                          getAppList();
+                        });
+                        break;
                     }
                   },
                   itemBuilder: (BuildContext context) {
@@ -381,7 +450,11 @@ class AppConfigState extends State<AppConfigList> {
                       CheckedPopupMenuItem<AppOption>(
                           checked: _showSystemAppSelected,
                           value: AppOption.showSystemApp,
-                          child: Text(S.of(context).text_show_system_app))
+                          child: Text(S.of(context).text_show_system_app)),
+                      CheckedPopupMenuItem<AppOption>(
+                          checked: _scanRootClones,
+                          value: AppOption.scanClones,
+                          child: Text(S.of(context).text_scan_clones))
                     ];
                   })
             ]),
@@ -431,10 +504,50 @@ class AppConfigState extends State<AppConfigList> {
                                   ? Image.memory(itemMap["iconBytes"], fit: BoxFit.cover)
                                   : const Icon(Icons.accessibility),
                             ),
-                            // 标题
-                            title: Text(itemMap["label"]),
-                            // 副标题
-                            subtitle: Text(itemMap["packageName"]),
+                            // 标题（含分身时加标识）
+                            title: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '${itemMap["label"]}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                // 只有同包名出现在多个用户里（原应用+分身）才显示用户号，
+                                // 普通应用不额外加标识，避免列表噪音
+                                if ((_packageUserCounts[
+                                            '${itemMap["packageName"]}'] ??
+                                        1) >
+                                    1) ...[
+                                  const SizedBox(width: 6.0),
+                                  Builder(builder: (context) {
+                                    final isClone = itemMap["multiUser"] == true;
+                                    final color =
+                                        isClone ? Colors.deepPurple : Colors.blueGrey;
+                                    final userId =
+                                        (itemMap["userId"] as num?)?.toInt() ?? 0;
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 5.0, vertical: 1.0),
+                                      decoration: BoxDecoration(
+                                        color: color.withAlpha(30),
+                                        borderRadius: BorderRadius.circular(4.0),
+                                        border: Border.all(color: color.withAlpha(100)),
+                                      ),
+                                      child: Text(
+                                        '${S.of(context).app_user_prefix} $userId',
+                                        style: TextStyle(fontSize: 10.0, color: color),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                            // 副标题：包名 + 分身所在用户/资料
+                            subtitle: Text(
+                              _appSubtitle(S.of(context), itemMap),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             // 显示一个复选框
                             trailing: CardCheckbox(
                                 key: _cardKeys[c_index],

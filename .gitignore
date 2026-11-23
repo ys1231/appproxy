@@ -54,3 +54,6 @@ pubspec.lock
 .vscode
 .tmp
 /dist
+# Local build environment (machine-specific)
+/android/local.properties
+/android/app/*.keystore

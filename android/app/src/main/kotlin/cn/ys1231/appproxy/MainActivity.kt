@@ -47,6 +47,10 @@ class MainActivity : FlutterActivity() {
     private var mcpServiceBinder: MCPForegroundService.MCPServiceBinder? = null
     private var mcpConn: ServiceConnection? = null
     private var isMcpBind: Boolean = false
+    // 绑定完成前的 MCP 启停/配置请求先排队，避免 Flutter 启动时 binder 还是 null 导致丢失
+    private var pendingMcpStart: Boolean = false
+    private var pendingMcpPort: Int? = null
+    private var pendingMcpAuth: String? = null
     // eBPF(sing-box) 引擎：与原 VPN 通道完全独立
     private var ebpfChannelHandler: EbpfChannelHandler? = null
     /**
@@ -85,13 +89,30 @@ class MainActivity : FlutterActivity() {
             isBind = true
         }
 
-        // 启动并绑定 MCPForegroundService，确保 App 进入后台后 MCP Server 持续运行
+        // 只绑定 MCPForegroundService，不主动 startForegroundService。
+        // 这样 MCP 关闭时不会在通知栏常驻 “MCP Server is not running”；
+        // 只有在设置里开启 MCP（或启动时已开启）才会由 startMcpServer() 提升为前台服务。
         val mcpServiceIntent = Intent(this, MCPForegroundService::class.java)
-        startForegroundService(mcpServiceIntent)
         mcpConn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
                 Log.d(TAG, "MCPForegroundService onServiceConnected")
                 mcpServiceBinder = service as? MCPForegroundService.MCPServiceBinder
+                // 补发绑定完成前排队的配置/启动请求
+                val binder = mcpServiceBinder
+                if (binder != null) {
+                    pendingMcpPort?.let {
+                        binder.updateMcpPort(it)
+                        pendingMcpPort = null
+                    }
+                    pendingMcpAuth?.let {
+                        binder.updateMcpAuth(it)
+                        pendingMcpAuth = null
+                    }
+                    if (pendingMcpStart) {
+                        pendingMcpStart = false
+                        binder.startMcpServer()
+                    }
+                }
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
@@ -183,14 +204,18 @@ class MainActivity : FlutterActivity() {
         )
         FLUTTER_CHANNEL!!.setMethodCallHandler { call, result ->
             if (call.method == "getAppList") {
-                try {
-                    Log.d(TAG, "configureFlutterEngine ${call.method} ")
-                    val appList = utils!!.getAppList()
-                    result.success(appList)
-                } catch (e: Exception) {
-                    result.error("-1", e.message, null)
-                }
-
+                // 多用户/分身扫描会跑 pm root 命令并取图标，放到后台线程，
+                // 结果切回主线程再回写（MethodChannel 要求）
+                val includeRoot = call.argument<Boolean>("includeRoot") ?: false
+                Thread {
+                    try {
+                        Log.d(TAG, "getAppList: start background scan includeRoot=$includeRoot")
+                        val appList = utils!!.getAppList(includeRoot)
+                        runOnUiThread { result.success(appList) }
+                    } catch (e: Exception) {
+                        runOnUiThread { result.error("-1", e.message, null) }
+                    }
+                }.start()
             }
         }
 
@@ -246,7 +271,12 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startMcpServer" -> {
                     try {
-                        mcpServiceBinder?.startMcpServer()
+                        val binder = mcpServiceBinder
+                        if (binder != null) {
+                            binder.startMcpServer()
+                        } else {
+                            pendingMcpStart = true
+                        }
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("-1", e.message, null)
@@ -254,6 +284,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "stopMcpServer" -> {
                     try {
+                        pendingMcpStart = false
                         mcpServiceBinder?.stopMcpServer()
                         result.success(true)
                     } catch (e: Exception) {
@@ -270,10 +301,11 @@ class MainActivity : FlutterActivity() {
                         if (binder != null) {
                             binder.updateMcpPort(port)
                             binder.updateMcpAuth(auth)
-                            result.success(true)
                         } else {
-                            result.success(false)
+                            pendingMcpPort = port
+                            pendingMcpAuth = auth
                         }
+                        result.success(true)
                     } catch (e: Exception) {
                         result.error("-1", e.message, null)
                     }

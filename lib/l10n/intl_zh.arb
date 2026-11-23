@@ -52,7 +52,7 @@
   "ok": "确认",
   "text_modify_config": "修改配置",
   "text_backuprestore": "备份&还原",
-  "overwrite_existing_config": "会覆盖现有配置",
+  "overwrite_existing_config": "可选择追加还原或覆盖还原",
   "text_backup": "备份",
   "backup_failed": "备份失败, 配置文件为空",
   "text_restore": "还原",
@@ -172,5 +172,94 @@
   "ebpf_update_to": "更新到",
   "ebpf_resume": "继续下载",
   "ebpf_changelog": "更新说明",
-  "ebpf_pending_prefix": "已下载"
+  "ebpf_pending_prefix": "已下载",
+  "text_config_name_exists": "配置名称已存在，请换一个名称",
+  "restore_mode_title": "还原配置",
+  "restore_mode_pick": "请选择还原方式：",
+  "restore_mode_append": "追加还原",
+  "restore_mode_overwrite": "覆盖还原",
+  "restore_mode_append_hint": "保留本机现有配置，只新增备份中不存在的配置（同名跳过）",
+  "restore_mode_overwrite_hint": "清空本机现有配置后写入备份，不可撤销",
+  "restore_append_none": "追加还原完成：备份中的配置都已存在，没有新增",
+  "restore_append_done": "追加还原完成：新增 {added} 条，跳过重复 {skipped} 条",
+  "restore_overwrite_done": "还原成功，共 {count} 条配置",
+  "paste_import_title": "粘贴识别",
+  "paste_manage": "识别配置管理",
+  "paste_profile": "识别配置",
+  "paste_no_profile": "暂无识别配置，请先新增",
+  "paste_content_label": "粘贴代理内容",
+  "paste_content_hint": "示例：名称@类型@地址@端口@用户名@密码\n多行时只识别第一行",
+  "paste_preview": "识别结果",
+  "paste_preview_empty": "粘贴内容后自动识别",
+  "paste_apply": "应用到表单",
+  "paste_applied": "已识别并填充到表单",
+  "paste_help": "可自定义分隔符与字段顺序；支持「地址:端口」和完整 URL 两种组合字段。",
+  "paste_whole_text": "整段",
+  "paste_save": "保存",
+  "paste_separator": "分隔符",
+  "paste_separator_hint": "留空表示整段识别",
+  "paste_profile_name": "配置名称",
+  "paste_profile_fields": "字段顺序",
+  "paste_profile_fields_add": "添加字段",
+  "paste_profile_add": "新增识别配置",
+  "paste_profile_edit": "编辑识别配置",
+  "paste_profile_delete": "删除",
+  "paste_profile_need_name": "请填写配置名称",
+  "paste_profile_need_field": "请至少添加一个字段",
+  "paste_field_name": "名称",
+  "paste_field_type": "类型",
+  "paste_field_host": "地址",
+  "paste_field_port": "端口",
+  "paste_field_user": "用户名",
+  "paste_field_pass": "密码",
+  "paste_field_host_port": "地址:端口",
+  "paste_field_url": "完整 URL",
+  "@restore_append_done": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "@restore_overwrite_done": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "app_multi_user_badge": "含分身",
+  "app_multi_user_vpn_warn_title": "VPN 引擎无法接管分身",
+  "app_multi_user_vpn_warn": "所选应用包含分身/多开。系统 VPN 只能作用于当前用户，分身应用不会被代理。建议改用 eBPF 引擎；继续启动时分身会保持直连。",
+  "app_multi_user_start_anyway": "仍用 VPN 启动",
+  "text_scan_clones": "扫描分身/多开应用",
+  "text_scan_clones_hint": "正在扫描系统分身/多开；若设备有 root，会请求一次授权",
+  "app_user_prefix": "用户",
+  "app_same_package_linked": "同包名联动",
+  "backup_include_binary_title": "备份二进制",
+  "backup_include_binary_hint": "是否同时备份 sing-box 二进制？还原时会一起恢复，免去重新下载。",
+  "backup_config_only": "仅备份配置",
+  "backup_with_binary": "配置 + 二进制",
+  "backup_binary_failed": "读取二进制失败，未生成备份",
+  "backup_success": "备份完成",
+  "restore_binary_ok": "sing-box 二进制已恢复",
+  "restore_binary_skipped_abi": "二进制 ABI 不匹配（备份 {from}，本机 {to}），已跳过",
+  "restore_binary_failed": "二进制恢复失败",
+  "ebpf_import_binary": "导入本地二进制",
+  "ebpf_import_binary_ok": "二进制导入成功",
+  "ebpf_import_binary_failed": "二进制导入失败",
+  "ebpf_download_accel_hint": "下载已启用 4 连接加速；也可从电脑下载后“导入本地二进制”",
+  "@restore_binary_skipped_abi": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  }
 }
