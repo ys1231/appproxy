@@ -187,6 +187,11 @@ class _AddProxyWidgetState extends State<AddProxyWidget> {
       fill(PasteField.port, _controller_proxyPort);
       fill(PasteField.user, _controller_proxyUser);
       fill(PasteField.pass, _controller_proxyPass);
+      // 服务商格式通常没有名称：名称空时用代理地址兜底，避免保存被拦
+      final host = (parsed[PasteField.host] ?? '').trim();
+      if (_controller_proxyName.text.trim().isEmpty && host.isNotEmpty) {
+        _controller_proxyName.text = host;
+      }
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(S.of(context).paste_applied)),

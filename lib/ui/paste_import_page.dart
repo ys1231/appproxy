@@ -127,6 +127,8 @@ class _PasteImportPageState extends State<PasteImportPage> {
         return s.paste_field_host_port;
       case PasteField.url:
         return s.paste_field_url;
+      case PasteField.ignore:
+        return s.paste_field_ignore;
       default:
         return field;
     }
@@ -446,6 +448,8 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
         return s.paste_field_host_port;
       case PasteField.url:
         return s.paste_field_url;
+      case PasteField.ignore:
+        return s.paste_field_ignore;
       default:
         return field;
     }
@@ -466,6 +470,7 @@ class _ProfileEditDialogState extends State<_ProfileEditDialog> {
       name: name,
       separator: _separator.text,
       fields: List<String>.from(_fields),
+      fixedType: widget.initial?.fixedType ?? '',
     );
     Navigator.pop(context, profile);
   }

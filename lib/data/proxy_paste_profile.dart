@@ -17,8 +17,12 @@ class PasteField {
   static const String pass = 'proxyPass';
   static const String hostPort = 'hostPort';
   static const String url = 'proxyUrl';
+  /// 服务商行里的到期时间、地区等段：识别但忽略
+  static const String ignore = 'ignore';
 
-  static const List<String> all = [name, type, host, port, user, pass, hostPort, url];
+  static const List<String> all = [
+    name, type, host, port, user, pass, hostPort, url, ignore
+  ];
 
   /// 组合字段会展开成多个基础字段，占用一个粘贴分段
   static bool isComposite(String field) => field == hostPort || field == url;
@@ -41,6 +45,8 @@ class PasteField {
         return '地址:端口';
       case url:
         return '完整 URL';
+      case ignore:
+        return '忽略';
       default:
         return field;
     }
@@ -58,19 +64,29 @@ class ProxyPasteProfile {
   /// 分段到字段的映射顺序
   final List<String> fields;
 
+  /// 可选：规则固定代理类型（如服务商行没有类型字段时固定 socks5）
+  final String fixedType;
+
   const ProxyPasteProfile({
     required this.id,
     required this.name,
     required this.separator,
     required this.fields,
+    this.fixedType = '',
   });
 
-  ProxyPasteProfile copyWith({String? name, String? separator, List<String>? fields}) {
+  ProxyPasteProfile copyWith({
+    String? name,
+    String? separator,
+    List<String>? fields,
+    String? fixedType,
+  }) {
     return ProxyPasteProfile(
       id: id,
       name: name ?? this.name,
       separator: separator ?? this.separator,
       fields: fields ?? List<String>.from(this.fields),
+      fixedType: fixedType ?? this.fixedType,
     );
   }
 
@@ -79,6 +95,7 @@ class ProxyPasteProfile {
         'name': name,
         'separator': separator,
         'fields': fields,
+        if (fixedType.isNotEmpty) 'fixedType': fixedType,
       };
 
   static ProxyPasteProfile? fromJson(dynamic value) {
@@ -93,11 +110,13 @@ class ProxyPasteProfile {
         .where((e) => PasteField.all.contains(e))
         .toList();
     if (fields.isEmpty) return null;
+    final fixedType = (value['fixedType'] ?? '').toString().trim().toLowerCase();
     return ProxyPasteProfile(
       id: id,
       name: name,
       separator: separator,
       fields: fields,
+      fixedType: const {'http', 'socks5'}.contains(fixedType) ? fixedType : '',
     );
   }
 
@@ -155,12 +174,17 @@ class ProxyPasteProfile {
           }
           out.addAll(parsed);
           break;
+        case PasteField.ignore:
+          break;
         case PasteField.type:
           out[field] = _normalizeType(value);
           break;
         default:
           out[field] = value;
       }
+    }
+    if (fixedType.isNotEmpty && !out.containsKey(PasteField.type)) {
+      out[PasteField.type] = fixedType;
     }
     return out;
   }
@@ -223,6 +247,8 @@ class ProxyPasteProfile {
 class ProxyPasteProfiles {
   static const String _profilesKey = 'proxyPasteProfiles';
   static const String _lastProfileKey = 'proxyPasteLastProfile';
+  static const String _seedVersionKey = 'proxyPasteProfilesVersion';
+  static const int _currentSeedVersion = 2;
 
   static List<ProxyPasteProfile> defaults() {
     const fields = [
@@ -258,6 +284,28 @@ class ProxyPasteProfiles {
         separator: '',
         fields: [PasteField.url],
       ),
+      // 服务商常见格式：host|port|user|pass|到期|地区
+      const ProxyPasteProfile(
+        id: 'builtin_provider4',
+        name: '识别配置5（服务商 4 段）',
+        separator: '|',
+        fields: [PasteField.host, PasteField.port, PasteField.user, PasteField.pass],
+        fixedType: 'socks5',
+      ),
+      const ProxyPasteProfile(
+        id: 'builtin_provider6',
+        name: '识别配置6（服务商 6 段）',
+        separator: '|',
+        fields: [
+          PasteField.host,
+          PasteField.port,
+          PasteField.user,
+          PasteField.pass,
+          PasteField.ignore,
+          PasteField.ignore,
+        ],
+        fixedType: 'socks5',
+      ),
     ];
   }
 
@@ -268,19 +316,35 @@ class ProxyPasteProfiles {
       final seed = defaults();
       await prefs.setString(
           _profilesKey, jsonEncode(seed.map((e) => e.toJson()).toList()));
+      await prefs.setInt(_seedVersionKey, _currentSeedVersion);
       return seed;
     }
+    var result = <ProxyPasteProfile>[];
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) return [];
-      return decoded
-          .map(ProxyPasteProfile.fromJson)
-          .whereType<ProxyPasteProfile>()
-          .toList();
+      if (decoded is List) {
+        result = decoded
+            .map(ProxyPasteProfile.fromJson)
+            .whereType<ProxyPasteProfile>()
+            .toList();
+      }
     } catch (e) {
       debugPrint('ProxyPasteProfiles.load: $e');
-      return [];
     }
+    // 老版本没有服务商格式规则：升级时补一次（用户删掉后不会再补）
+    final seedVersion = prefs.getInt(_seedVersionKey) ?? 1;
+    if (seedVersion < _currentSeedVersion) {
+      final ids = result.map((e) => e.id).toSet();
+      for (final p in defaults()) {
+        if ((p.id == 'builtin_provider4' || p.id == 'builtin_provider6') &&
+            !ids.contains(p.id)) {
+          result.add(p);
+        }
+      }
+      await save(result);
+      await prefs.setInt(_seedVersionKey, _currentSeedVersion);
+    }
+    return result;
   }
 
   static Future<void> save(List<ProxyPasteProfile> profiles) async {

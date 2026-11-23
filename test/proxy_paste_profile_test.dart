@@ -131,9 +131,35 @@ void main() {
     });
   });
 
-  test('默认规则包含 @ / # / | 与完整 URL', () {
+  test('默认规则包含 @ / # / | / URL 与服务商格式', () {
     final defaults = ProxyPasteProfiles.defaults();
     expect(defaults.map((e) => e.separator).toList(), containsAll(['@', '#', '|', '']));
     expect(defaults.where((e) => e.separator == '@').single.fields.length, 6);
+    expect(defaults.any((e) => e.id == 'builtin_provider4'), isTrue);
+    expect(defaults.any((e) => e.id == 'builtin_provider6'), isTrue);
+  });
+
+  test('服务商 6 段：识别 host/port/user/pass，忽略到期与地区', () {
+    final profile = ProxyPasteProfiles.defaults()
+        .firstWhere((e) => e.id == 'builtin_provider6');
+    final r = profile.parse(
+        'ch15.canghaiip.com|47890|qkab1123dl1000|6zi_20261123|2026-11-23|广西壮族自治区-柳州市');
+    expect(r[PasteField.host], 'ch15.canghaiip.com');
+    expect(r[PasteField.port], '47890');
+    expect(r[PasteField.user], 'qkab1123dl1000');
+    expect(r[PasteField.pass], '6zi_20261123');
+    expect(r[PasteField.type], 'socks5');
+    expect(r.containsKey(PasteField.name), isFalse);
+  });
+
+  test('服务商 4 段：host|port|user|pass', () {
+    final profile = ProxyPasteProfiles.defaults()
+        .firstWhere((e) => e.id == 'builtin_provider4');
+    final r = profile.parse('1.2.3.4|1080|u|p');
+    expect(r[PasteField.host], '1.2.3.4');
+    expect(r[PasteField.port], '1080');
+    expect(r[PasteField.user], 'u');
+    expect(r[PasteField.pass], 'p');
+    expect(r[PasteField.type], 'socks5');
   });
 }

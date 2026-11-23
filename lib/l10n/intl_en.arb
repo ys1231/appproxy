@@ -269,5 +269,6 @@
   "app_exclude_mode": "Exclude mode (checked apps go direct)",
   "app_exclude_mode_badge": "Exclude mode",
   "app_exclude_mode_hint": "Mode switched: in exclude mode, checked apps stay direct and all others go through the proxy",
-  "app_direct": "direct"
+  "app_direct": "direct",
+  "paste_field_ignore": "Ignore"
 }

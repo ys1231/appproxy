@@ -269,5 +269,6 @@
   "app_exclude_mode": "排除模式（勾选走直连）",
   "app_exclude_mode_badge": "排除模式",
   "app_exclude_mode_hint": "已切换代理模式：排除模式下，勾选的应用保持直连，其余应用走代理",
-  "app_direct": "直连"
+  "app_direct": "直连",
+  "paste_field_ignore": "忽略"
 }
