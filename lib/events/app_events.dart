@@ -2,68 +2,95 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-// 创建一个全局的EventBus实例
-// EventBus eventBus = EventBus();
+/// 一条被勾选的“应用实例”（同一包名在不同 Android 用户/分身下 UID 不同）。
+class AppProxyEntry {
+  final int uid;
+  final int userId;
+  final String packageName;
+  final bool multiUser;
 
-// 传递需要代理的app包名
-class AppProxyPackageList {
-  final Set<String> _proxyPackageList = {};
+  const AppProxyEntry({
+    required this.uid,
+    required this.userId,
+    required this.packageName,
+    required this.multiUser,
+  });
+}
 
-  // AppProxyPackageList(this.appProxyPackageList);
+/// 当前勾选的应用集合。
+///
+/// 代理引擎按 UID 精确定位（eBPF `include_uid`），因此可以只代理主应用
+/// （用户 0）或只代理分身（如用户 999），不再按包名一刀切。
+/// VPN(tun2socks) 只能作用于当前用户，分身选择由启动流程拦截提示。
+class AppProxySelection {
+  Map<int, AppProxyEntry> _entries = {};
 
-  void add(String appPackageName) {
-    if (kDebugMode) {
-      print("add:$appPackageName");
-    }
-    _proxyPackageList.add(appPackageName);
+  /// 是否已经从应用列表拿到了完整元数据（包名/用户）。
+  /// 启动时只从本地勾选表拿到 UID 时该值为 false，避免 VPN 用空包名启动。
+  bool metadataReady = false;
+
+  /// 应用列表尚未加载时，先用已保存的 UID 填充（eBPF 可用；VPN 会等待）
+  void replaceUids(Iterable<int> uids) {
+    _entries = {
+      for (final uid in uids)
+        if (uid > 0)
+          uid: AppProxyEntry(
+            uid: uid,
+            userId: 0,
+            packageName: '',
+            multiUser: false,
+          ),
+    };
+    metadataReady = false;
   }
 
-  /// 从"需要代理的包名集合"里移除一个包名
-  void remove(String appPackageName) {
-    if (kDebugMode) {
-      print("remove:$appPackageName");
-    }
-    _proxyPackageList.remove(appPackageName);
+  void replaceAll(Iterable<AppProxyEntry> entries) {
+    _entries = {for (final e in entries) e.uid: e};
+    metadataReady = true;
   }
 
-  /// 清空集合（"全不选"时调用）
+  void setSelected(AppProxyEntry entry, bool selected) {
+    if (selected) {
+      _entries[entry.uid] = entry;
+    } else {
+      _entries.remove(entry.uid);
+    }
+  }
+
   void clear() {
-    if (kDebugMode) {
-      print("clear appPackageName");
-    }
-    _proxyPackageList.clear();
+    _entries = {};
+    metadataReady = true;
   }
 
-  /// 导出为 JSON 字符串（原生侧解析用）
-  String getListString() {
-    if (kDebugMode) {
-      print("getList:${_proxyPackageList.toList()}");
-    }
-    return jsonEncode(_proxyPackageList.toList());
-  }
+  bool containsUid(int uid) => _entries.containsKey(uid);
 
-  /// 原始列表（eBPF 的 config.json 生成用：直接写进 include_package）
-  List<String> getList() {
-    return _proxyPackageList.toList();
-  }
-}
-// 保存已选择的app
-AppProxyPackageList appProxyPackageList = AppProxyPackageList();
+  List<AppProxyEntry> get entries => _entries.values.toList();
 
-/// 当前设备上存在"分身/多开"（同包名在其它 Android 用户里也有安装）的包名集合。
-/// 应用列表页扫描后刷新；启动 VPN 引擎时用于提示系统限制（VPN 无法接管其它用户）。
-class MultiUserPackages {
-  final Set<String> _packages = {};
+  List<int> get uids => _entries.keys.toList();
 
-  void replace(Iterable<String> names) {
-    _packages
-      ..clear()
-      ..addAll(names);
-  }
+  Set<String> get packages =>
+      _entries.values
+          .map((e) => e.packageName)
+          .where((e) => e.isNotEmpty)
+          .toSet();
 
-  bool intersects(Iterable<String> names) => names.any(_packages.contains);
+  /// VPN 能代理的包：仅当前用户（含未标记为 multiUser 的条目）
+  List<String> get currentUserPackages =>
+      _entries.values
+          .where((e) => !e.multiUser && e.packageName.isNotEmpty)
+          .map((e) => e.packageName)
+          .toSet()
+          .toList();
 
-  Set<String> get all => {..._packages};
+  bool get hasNonCurrentUser => _entries.values.any((e) => e.multiUser);
+
+  bool get hasCurrentUser => _entries.values.any((e) => !e.multiUser);
+
+  /// 原生 VPN 通道参数（只包含当前用户包名）
+  String getListString() => jsonEncode(currentUserPackages);
+
+  String debugSummary() =>
+      'uids=${_entries.keys.toList()} metadataReady=$metadataReady';
 }
 
-MultiUserPackages multiUserPackages = MultiUserPackages();
+AppProxySelection appProxySelection = AppProxySelection();

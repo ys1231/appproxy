@@ -84,7 +84,9 @@ class EbpfConfigGenerator {
   ///
   /// [proxy]       代理配置项（proxyType/proxyHost/proxyPort/proxyUser/proxyPass，
   ///               以及 eBPF 可调项 ebpfNetwork/ebpfDataPlane 与高级选项 ebpf* 键）
-  /// [packageList] 分应用包名列表（空 = 全部接管）
+  /// [packageList] 分应用包名列表（空 = 全部接管；有 [uidList] 时忽略）
+  /// [uidList]     精确到 UID 的选择（主应用/分身可分别选择）。
+  ///               非空时写 `local.include_uid`，不再写 `include_package`。
   /// [selfPackage] 本应用包名（写进 exclude_package）
   /// [cgroupSupported]        本机 cgroup 数据面是否可用（决定 ebpfDataPlane 为空时的默认值）
   /// [socketAssignSupported]  本机 socket_assign 数据面是否可用（同上）
@@ -95,6 +97,7 @@ class EbpfConfigGenerator {
   static String build({
     required Map<String, dynamic> proxy,
     required List<String> packageList,
+    List<int>? uidList,
     required String selfPackage,
     bool cgroupSupported = true,
     bool socketAssignSupported = true,
@@ -157,7 +160,8 @@ class EbpfConfigGenerator {
 
     debugPrint('EbpfConfigGenerator.build: type=$proxyType network=$networkMode '
         'dataPlane=$dataPlane dnsMode=${opts.effectiveDnsMode} '
-        'dnsServers=${opts.dnsServers.length} customOverride=${customOverride != null}');
+        'dnsServers=${opts.dnsServers.length} uids=$uidList '
+        'packages=${packageList.length} customOverride=${customOverride != null}');
 
     // ---- outbounds：唯一的出口：你填的那个代理 ----
     final outboundTag = isHttp ? 'http-out' : 'socks-out';
@@ -192,8 +196,16 @@ class EbpfConfigGenerator {
       'dns_mode': opts.effectiveDnsMode,
       ...opts.buildLocalExtras(),
     };
-    if (packageList.isNotEmpty) {
-      // 注意：**不写** include_package = 全部 app 都接管；写了就只接管列表里的
+    final uids = (uidList ?? const <int>[])
+        .where((e) => e > 0)
+        .toSet()
+        .toList();
+    if (uids.isNotEmpty) {
+      // UID 精确选择：可只代理主应用（用户 0）或只代理分身（如用户 999）。
+      // 注意此时不能再写 include_package，否则会把这些包名在所有用户下的 UID 都纳入。
+      local['include_uid'] = uids;
+    } else if (packageList.isNotEmpty) {
+      // 兼容按包名选择的旧逻辑/MCP：**不写** include_package = 全部 app 都接管
       local['include_package'] = packageList;
     }
     if (selfPackage.isNotEmpty) {

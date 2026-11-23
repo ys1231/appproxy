@@ -24,7 +24,8 @@ import com.google.gson.reflect.TypeToken
  *   inbounds[0].local.data_plane ← ebpfDataPlane：cgroup / socket_assign（缺省按本机检测能力）
  *   inbounds[0].local.dns_mode   ← ebpfDnsMode：空 → respect_policy（只接管被监听 app 的 DNS）；
  *                                  hijack = 全机 DNS；off = 不接管
- *   local.include_package    ← appProxyPackageList（为空则省略 ⇒ 全局接管）
+ *   local.include_uid        ← appProxyUidList（精确到主应用/分身；非空时优先于 include_package）
+ *   local.include_package    ← appProxyPackageList（为空则省略 ⇒ 全局接管；有 UID 列表时忽略）
  *   local.exclude_package    ← 本应用包名
  *   dns / route / local 其余项 ← 由 EbpfAdvancedOptions 从 ebpf* 键驱动
  *     （ebpfDnsServers/ebpfDnsStrategy/ebpfDnsRoute/ebpfIpv6/ebpfBypassPrivate/
@@ -119,10 +120,15 @@ object EbpfConfigBuilder {
             addProperty("dns_mode", opts.effectiveDnsMode())
             // 可选字段（ipv6/bypass_private/bypass_port*）：不写 = sing-box 默认
             opts.buildLocalExtras().forEach { (k, v) -> add(k, v) }
+            val uids = uidListOf(config["appProxyUidList"])
             val packages = packageListOf(config["appProxyPackageList"])
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
-            if (packages.isNotEmpty()) {
+            if (uids.isNotEmpty()) {
+                // UID 精确选择（主应用/分身可分别选择）；此时不能再写 include_package，
+                // 否则同名包在所有用户下的 UID 都会被纳入
+                add("include_uid", JsonArray().apply { uids.forEach { add(it) } })
+            } else if (packages.isNotEmpty()) {
                 add("include_package", JsonArray().apply { packages.forEach { add(it) } })
             }
             add("exclude_package", JsonArray().apply { add(context.packageName) })
@@ -231,6 +237,21 @@ object EbpfConfigBuilder {
             "ebpfDataPlane 无效: $value（仅支持 cgroup / socket_assign）"
         }
         return value
+    }
+
+    /** 兼容 List<Int>（MCP 路径）与 JSON 字符串（Flutter 路径）的 UID 列表 */
+    private fun uidListOf(value: Any?): List<Int> = when (value) {
+        null -> emptyList()
+        is List<*> -> value.mapNotNull {
+            (it as? Number)?.toInt() ?: it?.toString()?.toIntOrNull()
+        }.filter { it > 0 }
+        is String -> try {
+            gson.fromJson<List<Int>>(value, object : TypeToken<List<Int>>() {}.type)
+                ?.filter { it > 0 } ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        else -> emptyList()
     }
 
     /** 兼容两种入参：List<String>（MCP 路径）与 JSON 字符串（Flutter 路径） */

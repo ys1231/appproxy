@@ -237,14 +237,26 @@ class _ProxyListHomeState extends State<ProxyListHome> {
       }
     }
     final engine = _ebpfProfiles.contains(data["proxyName"]) ? "ebpf" : "tun2socks";
+    final selection = appProxySelection;
+    // 勾选只恢复到了 UID、应用列表还没加载完时，拒绝启动：
+    // 否则 VPN 会拿不到包名而变成全机代理
+    if (selection.uids.isNotEmpty && !selection.metadataReady) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).app_list_loading)));
+      return;
+    }
     if (engine == "ebpf") {
       await _startEbpfProxy(data);
       return;
     }
-    // VPN(VpnService) 只作用于当前 Android 用户，无法接管分身/工作资料里的应用；
-    // 选了这类包时先提示，避免用户以为分身也被代理了
-    final selectedPackages = appProxyPackageList.getList();
-    if (selectedPackages.isNotEmpty && multiUserPackages.intersects(selectedPackages)) {
+    // VPN(VpnService) 只作用于当前 Android 用户，无法接管分身/工作资料里的应用
+    if (selection.hasNonCurrentUser) {
+      if (!selection.hasCurrentUser) {
+        // 只勾选了分身：VPN 一个都代理不了，直接拦截并引导用 eBPF
+        await _showCloneOnlyVpnBlocked();
+        return;
+      }
       final proceed = await _confirmMultiUserWithVpn();
       if (!proceed) return;
     }
@@ -252,7 +264,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     await _stopOtherEngine("tun2socks");
     _isSelectedProxyName = data["proxyName"];
     _currentProxyData = data;
-    _currentProxyData['appProxyPackageList'] = appProxyPackageList.getListString();
+    // VPN 只传当前用户的包名；分身选择被忽略（上面已提示）
+    _currentProxyData['appProxyPackageList'] = selection.getListString();
     try {
       bool result = await platform.invokeMethod('startVpn', _currentProxyData);
       if (result) {
@@ -289,7 +302,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     // 2) 互斥：VPN(tun2socks) 正在跑就先停掉（两条链路不能同时接管流量）
     await _stopOtherEngine("ebpf");
 
-    // 3) 生成 config.json：outbounds 完全跟随本条配置（type/host/port/user/pass），
+    // 3) 生成 config.json：outbounds 完全跟随本条配置（type/host/port/user/pass）；
+    //    分应用选择按 UID → include_uid（可精确到主应用或分身），
     //    数据面 / 接管网络 / DNS 等 eBPF 可调项也在该配置里（跟随备份/恢复）
     final selfPackage = (await PackageInfo.fromPlatform()).packageName;
     // 兼容旧配置，并让数据面跟随本机能力：
@@ -315,7 +329,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     try {
       configJson = EbpfConfigGenerator.build(
         proxy: configData,
-        packageList: appProxyPackageList.getList(),
+        packageList: appProxySelection.packages.toList(),
+        uidList: appProxySelection.uids,
         selfPackage: selfPackage,
         cgroupSupported: support.cgroup,
         socketAssignSupported: support.socketAssign,
@@ -423,6 +438,25 @@ class _ProxyListHomeState extends State<ProxyListHome> {
       ),
     );
     return result == true;
+  }
+
+  /// 只勾选了分身时：VPN 无法代理任何目标，直接引导改用 eBPF
+  Future<void> _showCloneOnlyVpnBlocked() async {
+    if (!mounted) return;
+    final s = S.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.app_clone_only_vpn_title),
+        content: Text(s.app_clone_only_vpn_msg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.text_confirm),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 互斥：要启动 [engine] 前，先把另一个正在运行的引擎停掉
