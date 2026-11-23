@@ -52,7 +52,7 @@
   "ok": "OK",
   "text_modify_config": "Modify Configuration",
   "text_backuprestore": "Backup & Restore",
-  "overwrite_existing_config": "Overwrites existing config",
+  "overwrite_existing_config": "Choose append or overwrite restore",
   "text_backup": "Backup",
   "backup_failed": "Backup failed, configuration is empty",
   "text_restore": "Restore",
@@ -172,5 +172,103 @@
   "ebpf_update_to": "Update to",
   "ebpf_resume": "Resume",
   "ebpf_changelog": "Changelog",
-  "ebpf_pending_prefix": "downloaded"
+  "ebpf_pending_prefix": "downloaded",
+  "text_config_name_exists": "This name already exists, choose another one",
+  "restore_mode_title": "Restore configuration",
+  "restore_mode_pick": "Choose restore mode:",
+  "restore_mode_append": "Append",
+  "restore_mode_overwrite": "Overwrite",
+  "restore_mode_append_hint": "Keep current profiles and only add profiles missing from the backup (duplicates skipped)",
+  "restore_mode_overwrite_hint": "Clear all local profiles, then write the backup (cannot be undone)",
+  "restore_append_none": "Append done: all backup profiles already exist, nothing added",
+  "restore_append_done": "Append done: {added} added, {skipped} duplicates skipped",
+  "restore_overwrite_done": "Restore done: {count} profiles",
+  "paste_import_title": "Paste import",
+  "paste_manage": "Manage rules",
+  "paste_profile": "Recognition rule",
+  "paste_no_profile": "No rules yet, add one first",
+  "paste_content_label": "Paste proxy text",
+  "paste_content_hint": "Example: name@type@host@port@user@pass\nOnly the first line is used",
+  "paste_preview": "Recognized fields",
+  "paste_preview_empty": "Paste content to preview",
+  "paste_apply": "Apply to form",
+  "paste_applied": "Imported into the form",
+  "paste_help": "Customize the separator and field order; supports combined 'host:port' and full URL fields.",
+  "paste_whole_text": "Whole text",
+  "paste_save": "Save",
+  "paste_separator": "Separator",
+  "paste_separator_hint": "Empty = recognize whole text",
+  "paste_profile_name": "Rule name",
+  "paste_profile_fields": "Field order",
+  "paste_profile_fields_add": "Add field",
+  "paste_profile_add": "Add rule",
+  "paste_profile_edit": "Edit rule",
+  "paste_profile_delete": "Delete",
+  "paste_profile_need_name": "Rule name is required",
+  "paste_profile_need_field": "Add at least one field",
+  "paste_field_name": "Name",
+  "paste_field_type": "Type",
+  "paste_field_host": "Host",
+  "paste_field_port": "Port",
+  "paste_field_user": "Username",
+  "paste_field_pass": "Password",
+  "paste_field_host_port": "Host:port",
+  "paste_field_url": "Full URL",
+  "@restore_append_done": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "@restore_overwrite_done": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "app_multi_user_badge": "clone",
+  "app_multi_user_vpn_warn_title": "VPN cannot proxy cloned apps",
+  "app_multi_user_vpn_warn": "Selected apps include clones/multi-instances. Android VPN only applies to the current user, so cloned apps will not be proxied. Use the eBPF engine instead; if you continue, clones stay direct.",
+  "app_multi_user_start_anyway": "Start with VPN anyway",
+  "text_scan_clones": "Scan cloned apps",
+  "text_scan_clones_hint": "Scanning clone/multi-instance apps; a one-time root prompt may appear on rooted devices",
+  "app_user_prefix": "User",
+  "app_same_package_linked": "same package linked",
+  "backup_include_binary_title": "Back up binary",
+  "backup_include_binary_hint": "Also include the sing-box binary? Restoring the backup will restore it too, so you don't need to download again.",
+  "backup_config_only": "Config only",
+  "backup_with_binary": "Config + binary",
+  "backup_binary_failed": "Failed to read binary; backup was not created",
+  "backup_success": "Backup complete",
+  "restore_binary_ok": "sing-box binary restored",
+  "restore_binary_skipped_abi": "Binary ABI mismatch (backup {from}, device {to}); binary skipped",
+  "restore_binary_failed": "Failed to restore binary",
+  "ebpf_import_binary": "Import local binary",
+  "ebpf_import_binary_ok": "Binary imported",
+  "ebpf_import_binary_failed": "Failed to import binary",
+  "ebpf_download_accel_hint": "4-connection acceleration is enabled; you can also download on a PC and use “Import local binary”",
+  "@restore_binary_skipped_abi": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "app_clone_only_vpn_title": "VPN cannot proxy clones",
+  "app_clone_only_vpn_msg": "Only cloned apps are selected. Android VPN only applies to the current user, so clones in other users cannot be proxied.\nSwitch this proxy config to the eBPF engine, or also select the main app.",
+  "app_list_loading": "App list is loading, please try again shortly",
+  "app_selection_need_scan": "The selection includes clones that are not loaded yet. Tap “Scan cloned apps” on the config page before starting VPN.",
+  "app_exclude_mode": "Exclude mode (checked apps go direct)",
+  "app_exclude_mode_badge": "Exclude mode",
+  "app_exclude_mode_hint": "Mode switched: in exclude mode, checked apps stay direct and all others go through the proxy",
+  "app_direct": "direct",
+  "paste_field_ignore": "Ignore"
 }

@@ -11,6 +11,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * eBPF(sing-box) 引擎管理器。
@@ -88,6 +91,10 @@ class EbpfProxyManager private constructor(private val context: Context) {
         private const val BIND_CONFLICT_MARKER = "address already in use"
         private const val MAX_START_RETRIES = 3
         private const val RETRY_DELAY_MS = 400L
+
+        /** 下载加速：该源单连接约 300-400KB/s，4 连接实测约 1.8 倍；失败会回退单连接 */
+        private const val PARALLEL_CONNECTIONS = 4
+        private const val PART_SUFFIX = ".part"
 
         /**
          * 启动就绪标记（**版本无关**：禁止只绑定某一个二进制版本的日志措辞）。
@@ -253,6 +260,65 @@ class EbpfProxyManager private constructor(private val context: Context) {
             updatedAt = if (f.exists()) f.lastModified() else 0,
             pendingBytes = pendingDownloadBytes(),
         )
+    }
+
+    /** 读取当前 ABI 的二进制字节（备份用）；不存在返回 null */
+    fun readBinaryBytes(): ByteArray? = try {
+        val f = binaryFile()
+        if (f.exists() && f.length() > 0) f.readBytes() else null
+    } catch (e: Exception) {
+        Log.w(TAG, "readBinaryBytes: ${e.message}")
+        null
+    }
+
+    /**
+     * 导入二进制（一体化备份还原 / 本地文件导入共用）。
+     *
+     * 只做格式与大小校验后写入 app 私有目录，并更新 support.json 里的来源版本信息；
+     * 是否真的能跑仍由设置页「检测」决定，不在这里静默标记 supported。
+     */
+    fun importBinary(
+        bytes: ByteArray,
+        packageVersion: String? = null,
+        versionCode: Int? = null,
+        changelogUrl: String? = null,
+        binaryVersion: String? = null,
+    ): BinaryStatus {
+        if (bytes.size < MIN_BINARY_SIZE) {
+            throw EbpfException("二进制文件不完整（${bytes.size} 字节，至少需要 ${MIN_BINARY_SIZE} 字节）")
+        }
+        if (bytes[0].toInt() and 0xFF != ELF_MAGIC_0 || bytes[1].toInt() and 0xFF != ELF_MAGIC_1) {
+            throw EbpfException("不是 ELF 可执行文件")
+        }
+        ensureBinDir()
+        val target = binaryFile()
+        val tmp = File(binDir, target.name + ".import")
+        try {
+            tmp.writeBytes(bytes)
+            if (target.exists() && !target.delete()) throw EbpfException("覆盖旧二进制失败")
+            if (!tmp.renameTo(target)) throw EbpfException("保存二进制失败")
+        } finally {
+            if (tmp.exists()) tmp.delete()
+        }
+        // 清掉旧的单连接/多连接临时文件，避免「未下载完」状态残留
+        File(binDir, target.name + ".tmp").delete()
+        File(binDir, target.name + ".tmp.version").delete()
+        deleteDownloadParts(target)
+        val support = readSupport()
+        writeSupport(
+            support.copy(
+                binaryReady = true,
+                binaryPackageVersion = packageVersion?.takeIf { it.isNotBlank() }
+                    ?: support.binaryPackageVersion,
+                binaryVersionCode = versionCode ?: support.binaryVersionCode,
+                binaryChangelogUrl = changelogUrl?.takeIf { it.isNotBlank() }
+                    ?: support.binaryChangelogUrl,
+                binaryVersion = binaryVersion?.takeIf { it.isNotBlank() }
+                    ?: support.binaryVersion,
+            )
+        )
+        Log.d(TAG, "importBinary: ok ${target.absolutePath} (${target.length()} bytes)")
+        return getBinaryStatus()
     }
 
     /** 部分下载中的临时文件大小（>0 表示上次没下完，可续传） */
@@ -473,6 +539,7 @@ class EbpfProxyManager private constructor(private val context: Context) {
                         "downloadBinary: .tmp 版本(${tmpVersion ?: "未知"})与目标($selectedVersion)不一致，清理后重下"
                     )
                     tmp.delete()
+                    deleteDownloadParts(tmp)
                 }
             }
             // 记录本次目标版本：中断后下次才能判断能不能续传
@@ -486,18 +553,169 @@ class EbpfProxyManager private constructor(private val context: Context) {
             Log.w(TAG, "downloadBinary: 目标版本未知，清理残留 .tmp 后重新下载")
             tmp.delete()
             tmpVersionTag.delete()
+            deleteDownloadParts(tmp)
         }
 
-        // 2) 下载（有 .tmp 就尝试续传）
+        // 2) 下载：全新文件优先多连接分段下载（源限速时约 1.8 倍）；
+        //    已有 .tmp 或服务端不支持 Range 时回退单连接续传
         val existing = if (tmp.exists()) tmp.length() else 0L
+        val parallelDone = existing == 0L && downloadParallel(url, tmp, onProgress)
+        if (!parallelDone) {
+            downloadSingleStream(url, tmp, existing, onProgress)
+        }
+
+        // 3) 校验：不完整 → 保留 .tmp 续传；不是 ELF → 丢弃
+        if (tmp.length() < MIN_BINARY_SIZE) {
+            throw EbpfException("下载不完整（${tmp.length()} 字节），可再点一次续传")
+        }
+        val head = ByteArray(2)
+        tmp.inputStream().use { it.read(head) }
+        if (head[0].toInt() and 0xFF != ELF_MAGIC_0 || head[1].toInt() and 0xFF != ELF_MAGIC_1) {
+            tmp.delete()
+            tmpVersionTag.delete()
+            deleteDownloadParts(tmp)
+            throw EbpfException("下载文件不是 ELF 可执行文件（已丢弃）")
+        }
+        if (target.exists()) target.delete()
+        if (!tmp.renameTo(target)) {
+            throw EbpfException("保存二进制失败")
+        }
+        // 下载完成：版本标记只服务于续传，随 .tmp 一起清掉
+        tmpVersionTag.delete()
+
+        // 4) 记录来源版本（用于「有新版本」判断）
+        //    指定版本时记录该版本；versionCode 只在下载的是最新版时才有意义（否则置 0）。
+        if (update.error.isEmpty() && selectedVersion.isNotEmpty()) {
+            val support = readSupport()
+            writeSupport(support.copy(
+                binaryPackageVersion = selectedVersion,
+                binaryVersionCode = if (selectedVersion == update.latestVersion) update.versionCode else 0,
+                binaryChangelogUrl = update.changelogUrl,
+            ))
+        }
+        Log.d(TAG, "downloadBinary: ok ${target.absolutePath} (${target.length()} bytes)")
+        return getBinaryStatus()
+    }
+
+    /**
+     * 多连接分段下载（全新下载时使用）。
+     *
+     * 该下载源单连接约 300-400KB/s，4 连接实测约 1.8 倍。分段文件保存在
+     * `<bin>.tmp.partN`，中断后再次下载会从各段已有大小继续；服务端不返回 206
+     * 时清理分段并返回 false，由调用方回退单连接。
+     *
+     * @return true = 已完整写入 [tmp]；false = 不支持分段，需回退单连接
+     */
+    private fun downloadParallel(
+        url: String,
+        tmp: File,
+        onProgress: ((Int) -> Unit)?,
+    ): Boolean {
+        val total = probeContentLength(url) ?: return false
+        if (total < MIN_BINARY_SIZE) return false
+
+        val dir = tmp.parentFile ?: return false
+        val parts = (0 until PARALLEL_CONNECTIONS)
+            .map { File(dir, tmp.name + PART_SUFFIX + it) }
+        val sizeTag = File(dir, tmp.name + PART_SUFFIX + ".size")
+        val savedTotal = try {
+            sizeTag.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull()
+        } catch (e: Exception) {
+            null
+        }
+        if (savedTotal != null && savedTotal != total) {
+            Log.w(TAG, "downloadParallel: 分段总大小变化($savedTotal -> $total)，清理旧分段")
+            parts.forEach { it.delete() }
+        }
+        try {
+            sizeTag.writeText(total.toString())
+        } catch (e: Exception) {
+            Log.w(TAG, "downloadParallel: 写分段大小标记失败: ${e.message}")
+        }
+
+        val chunk = (total + PARALLEL_CONNECTIONS - 1) / PARALLEL_CONNECTIONS
+        val done = AtomicLong(0)
+        parts.forEach { done.addAndGet(minOf(it.length(), chunk)) }
+
+        val progressLock = Any()
+        val lastPercent = AtomicInteger(-1)
+        fun report() {
+            if (total <= 0) return
+            val percent = ((done.get() * 100) / total).toInt().coerceIn(0, 100)
+            if (lastPercent.get() == percent) return
+            synchronized(progressLock) {
+                if (lastPercent.get() != percent) {
+                    lastPercent.set(percent)
+                    onProgress?.invoke(percent)
+                }
+            }
+        }
+        report()
+
+        val errors = java.util.Collections.synchronizedList(mutableListOf<Exception>())
+        val rangeUnsupported = AtomicBoolean(false)
+        val threads = parts.mapIndexed { index, part ->
+            Thread {
+                try {
+                    val base = index.toLong() * chunk
+                    if (part.length() > chunk) part.delete()
+                    val start = base + part.length()
+                    val end = minOf(base + chunk - 1, total - 1)
+                    if (start > end) return@Thread
+                    openRangeAppend(url, part, start, end) { n ->
+                        done.addAndGet(n.toLong())
+                        report()
+                    }
+                } catch (e: RangeUnsupportedException) {
+                    rangeUnsupported.set(true)
+                } catch (e: Exception) {
+                    errors.add(e)
+                }
+            }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        if (rangeUnsupported.get()) {
+            Log.w(TAG, "downloadParallel: 服务端不支持 Range，回退单连接")
+            parts.forEach { it.delete() }
+            sizeTag.delete()
+            return false
+        }
+        if (errors.isNotEmpty()) {
+            Log.w(TAG, "downloadParallel: ${errors.size} 个分段失败，保留进度供续传")
+            throw EbpfException("下载中断: ${errors.first().message}（已保留进度，可再点一次续传）")
+        }
+
+        FileOutputStream(tmp).use { output ->
+            parts.forEach { part ->
+                part.inputStream().use { it.copyTo(output) }
+            }
+        }
+        if (tmp.length() != total) {
+            throw EbpfException("下载不完整（${tmp.length()}/$total 字节），可再点一次续传")
+        }
+        parts.forEach { it.delete() }
+        sizeTag.delete()
+        onProgress?.invoke(100)
+        Log.d(TAG, "downloadParallel: ok $total bytes (${PARALLEL_CONNECTIONS} connections)")
+        return true
+    }
+
+    /** 单连接下载/续传（回退路径，行为与旧版一致） */
+    private fun downloadSingleStream(
+        url: String,
+        tmp: File,
+        existing: Long,
+        onProgress: ((Int) -> Unit)?,
+    ) {
         var conn: HttpURLConnection? = null
         try {
             conn = openForDownload(url, existing)
             var code = conn.responseCode
             var appending = existing > 0 && code == HttpURLConnection.HTTP_PARTIAL
             if (existing > 0 && !appending) {
-                // 服务端不支持 Range（或 .tmp 与远端不一致）→ 丢弃重下
-                Log.w(TAG, "downloadBinary: 服务端返回 $code，放弃续传")
+                Log.w(TAG, "downloadSingleStream: 服务端返回 $code，放弃续传")
                 tmp.delete()
                 conn.disconnect()
                 conn = openForDownload(url, 0)
@@ -534,38 +752,102 @@ class EbpfProxyManager private constructor(private val context: Context) {
         } finally {
             conn?.disconnect()
         }
-
-        // 3) 校验：不完整 → 保留 .tmp 续传；不是 ELF → 丢弃
-        if (tmp.length() < MIN_BINARY_SIZE) {
-            throw EbpfException("下载不完整（${tmp.length()} 字节），可再点一次续传")
-        }
-        val head = ByteArray(2)
-        tmp.inputStream().use { it.read(head) }
-        if (head[0].toInt() and 0xFF != ELF_MAGIC_0 || head[1].toInt() and 0xFF != ELF_MAGIC_1) {
-            tmp.delete()
-            tmpVersionTag.delete()
-            throw EbpfException("下载文件不是 ELF 可执行文件（已丢弃）")
-        }
-        if (target.exists()) target.delete()
-        if (!tmp.renameTo(target)) {
-            throw EbpfException("保存二进制失败")
-        }
-        // 下载完成：版本标记只服务于续传，随 .tmp 一起清掉
-        tmpVersionTag.delete()
-
-        // 4) 记录来源版本（用于「有新版本」判断）
-        //    指定版本时记录该版本；versionCode 只在下载的是最新版时才有意义（否则置 0）。
-        if (update.error.isEmpty() && selectedVersion.isNotEmpty()) {
-            val support = readSupport()
-            writeSupport(support.copy(
-                binaryPackageVersion = selectedVersion,
-                binaryVersionCode = if (selectedVersion == update.latestVersion) update.versionCode else 0,
-                binaryChangelogUrl = update.changelogUrl,
-            ))
-        }
-        Log.d(TAG, "downloadBinary: ok ${target.absolutePath} (${target.length()} bytes)")
-        return getBinaryStatus()
     }
+
+    /** 下载一段区间并追加到 [part]；服务端返回 200（忽略 Range）时抛 [RangeUnsupportedException] */
+    private fun openRangeAppend(
+        url: String,
+        part: File,
+        start: Long,
+        end: Long,
+        onBytes: (Int) -> Unit,
+    ) {
+        var attempt = 0
+        var cursor = start
+        while (true) {
+            try {
+                val conn = openForDownload(url, 0)
+                conn.setRequestProperty("Range", "bytes=$cursor-$end")
+                try {
+                    val code = conn.responseCode
+                    if (code == HttpURLConnection.HTTP_OK) throw RangeUnsupportedException()
+                    if (code != HttpURLConnection.HTTP_PARTIAL) {
+                        throw EbpfException("下载失败: HTTP $code")
+                    }
+                    conn.inputStream.use { input ->
+                        FileOutputStream(part, true).use { output ->
+                            val buf = ByteArray(64 * 1024)
+                            var remaining = end - cursor + 1
+                            while (remaining > 0) {
+                                val n = input.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
+                                if (n <= 0) break
+                                output.write(buf, 0, n)
+                                onBytes(n)
+                                cursor += n
+                                remaining -= n
+                            }
+                            if (remaining > 0) throw EbpfException("连接提前结束")
+                        }
+                    }
+                    return
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: RangeUnsupportedException) {
+                throw e
+            } catch (e: Exception) {
+                attempt++
+                if (attempt >= 3) throw e
+                Thread.sleep(600L)
+            }
+        }
+    }
+
+    /** 取远端文件总大小：优先 HEAD，失败时用 Range 0-0 的 Content-Range 兜底 */
+    private fun probeContentLength(url: String): Long? {
+        try {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 20_000
+                readTimeout = 20_000
+                instanceFollowRedirects = true
+                requestMethod = "HEAD"
+            }
+            try {
+                val code = conn.responseCode
+                if (code in 200..299 && conn.contentLengthLong > 0) return conn.contentLengthLong
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "probeContentLength(HEAD): ${e.message}")
+        }
+        try {
+            val conn = openForDownload(url, 0)
+            try {
+                val code = conn.responseCode
+                if (code == HttpURLConnection.HTTP_PARTIAL) {
+                    val total = conn.getHeaderField("Content-Range")
+                        ?.substringAfterLast('/')?.toLongOrNull()
+                    if (total != null && total > 0) return total
+                } else if (code == HttpURLConnection.HTTP_OK && conn.contentLengthLong > 0) {
+                    return conn.contentLengthLong
+                }
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "probeContentLength(GET): ${e.message}")
+        }
+        return null
+    }
+
+    private fun deleteDownloadParts(target: File) {
+        val dir = target.parentFile ?: return
+        val prefix = target.name + PART_SUFFIX
+        dir.listFiles()?.forEach { if (it.name.startsWith(prefix)) it.delete() }
+    }
+
+    private class RangeUnsupportedException : Exception("服务端不支持断点续传")
 
     /** 打开下载连接；[existing] > 0 时带 Range 头请求续传 */
     private fun openForDownload(url: String, existing: Long): HttpURLConnection {

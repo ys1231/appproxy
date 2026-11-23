@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 
 /// eBPF(sing-box) 引擎的 Flutter 侧通道封装。
@@ -123,6 +125,32 @@ class EbpfProxyData {
   static Future<bool> cleanupRuntimeDir() async {
     _ensureHandler();
     return await _channel.invokeMethod<bool>('cleanupRuntimeDir') ?? false;
+  }
+
+  /// 读取当前 ABI 的二进制字节（备份用）；未下载时返回 null
+  static Future<Uint8List?> readBinary() async {
+    _ensureHandler();
+    return await _channel.invokeMethod<Uint8List>('readBinary');
+  }
+
+  /// 导入二进制（一体化备份还原 / 本地文件导入）。
+  /// 原生会校验 ELF/大小并更新来源版本；是否可运行仍需「检测」。
+  static Future<EbpfBinaryStatus> importBinary({
+    required Uint8List bytes,
+    String packageVersion = '',
+    int versionCode = 0,
+    String changelogUrl = '',
+    String binaryVersion = '',
+  }) async {
+    _ensureHandler();
+    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>('importBinary', {
+      'bytes': bytes,
+      'packageVersion': packageVersion,
+      'versionCode': versionCode,
+      'changelogUrl': changelogUrl,
+      'binaryVersion': binaryVersion,
+    });
+    return EbpfBinaryStatus.fromMap(raw);
   }
 }
 

@@ -121,6 +121,28 @@ class EbpfChannelHandler(private val activity: Activity, private val context: Co
 
             "cleanupRuntimeDir" -> runAsync(result) { manager.cleanupRuntimeDir() }
 
+            // 备份/本地导入：读取当前 ABI 的二进制字节
+            "readBinary" -> runAsync(result) { manager.readBinaryBytes() }
+
+            // 备份还原/本地文件导入二进制：写入 app 私有目录并更新来源版本
+            "importBinary" -> {
+                val bytes = call.argument<ByteArray>("bytes")
+                    ?: return result.error("-1", "缺少 bytes", null)
+                val packageVersion = call.argument<String>("packageVersion")
+                val versionCode = call.argument<Int>("versionCode")
+                val changelogUrl = call.argument<String>("changelogUrl")
+                val binaryVersion = call.argument<String>("binaryVersion")
+                runAsync(result) {
+                    manager.importBinary(
+                        bytes = bytes,
+                        packageVersion = packageVersion,
+                        versionCode = versionCode,
+                        changelogUrl = changelogUrl,
+                        binaryVersion = binaryVersion,
+                    ).toMap()
+                }
+            }
+
             else -> result.notImplemented()
         }
     }

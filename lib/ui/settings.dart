@@ -1,6 +1,8 @@
-import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:appproxy/data/common.dart';
+import 'package:appproxy/data/ebpf_proxy_data.dart';
+import 'package:appproxy/data/proxy_backup_bundle.dart';
 import 'package:appproxy/events/theme/theme_bloc.dart';
 import 'package:appproxy/ui/app_update.dart';
 import 'package:appproxy/ui/ebpf_settings.dart';
@@ -17,6 +19,9 @@ import '../data/proxy_config_data.dart';
 import '../events/language/language_bloc.dart';
 import '../events/restore/restore_cubit.dart';
 import '../generated/l10n.dart';
+
+/// 还原方式：追加（保留本机现有配置）或覆盖（清空本机后写入备份）
+enum _RestoreMode { append, overwrite }
 
 class AppSettings extends StatefulWidget {
   const AppSettings({super.key});
@@ -72,6 +77,222 @@ class _AppSettingsState extends State<AppSettings> {
   void initState() {
     super.initState();
     initDeviceInfo();
+  }
+
+  /// 备份：有二进制时询问是否一起打包（ZIP），否则仍输出原 JSON
+  Future<void> _backupConfig() async {
+    final s = S.of(context);
+    EbpfBinaryStatus binary = const EbpfBinaryStatus();
+    try {
+      binary = await EbpfProxyData.getBinaryStatus();
+    } catch (e) {
+      debugPrint('_backupConfig getBinaryStatus: $e');
+    }
+    var includeBinary = false;
+    if (binary.exists) {
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(s.backup_include_binary_title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(s.backup_include_binary_hint),
+              const SizedBox(height: 8.0),
+              Text('${binary.fileName} · ${binary.sizeText}',
+                  style: const TextStyle(fontSize: 12.0)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(s.backup_config_only),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(s.backup_with_binary),
+            ),
+          ],
+        ),
+      );
+      if (choice == null || !mounted) return;
+      includeBinary = choice;
+    }
+
+    final configBytes = await _proxyConfigData.toBytes();
+    if (!mounted) return;
+    if (configBytes.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.backup_failed)));
+      return;
+    }
+
+    var output = configBytes;
+    var ext = 'json';
+    if (includeBinary) {
+      final bin = await EbpfProxyData.readBinary();
+      if (!mounted) return;
+      if (bin == null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(s.backup_binary_failed)));
+        return;
+      }
+      final manifest = <String, dynamic>{
+        'format': 1,
+        'app': 'appproxy',
+        'createdAt': DateTime.now().toIso8601String(),
+        'abi': binary.abi,
+        'binary': {
+          'fileName': binary.fileName,
+          'size': bin.length,
+          'version': binary.version,
+          'packageVersion': binary.packageVersion,
+        },
+      };
+      try {
+        output = ProxyBackupBundle.encode(
+          configBytes: configBytes,
+          binaryBytes: bin,
+          manifest: manifest,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+        return;
+      }
+      ext = 'zip';
+    }
+
+    final fileName =
+        'appproxy_backup_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    try {
+      await FilePicker.saveFile(fileName: fileName, bytes: output);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.backup_success), duration: const Duration(seconds: 2)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  /// 还原：支持旧 JSON 备份与「配置+二进制」ZIP 备份
+  Future<void> _restoreBackup() async {
+    final s = S.of(context);
+    final mode = await _pickRestoreMode();
+    if (mode == null || !mounted) return;
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['json', 'zip'],
+    );
+    if (file == null) {
+      debugPrint("还原失败, 未选择文件");
+      return;
+    }
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+
+    ProxyBackupBundle? bundle;
+    Uint8List configBytes = bytes;
+    if (ProxyBackupBundle.isZip(bytes)) {
+      bundle = ProxyBackupBundle.decode(bytes);
+      if (bundle == null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(s.restore_failed)));
+        return;
+      }
+      configBytes = bundle.configBytes;
+    }
+
+    final result = await _proxyConfigData.restoreFromBytes(
+      configBytes,
+      append: mode == _RestoreMode.append,
+    );
+    if (!mounted) return;
+    if (!result.ok) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.restore_failed)));
+      return;
+    }
+    context.read<RestoreCubit>().increment();
+
+    final message = StringBuffer(mode == _RestoreMode.append
+        ? (result.added == 0
+            ? s.restore_append_none
+            : s.restore_append_done(result.added, result.skipped))
+        : s.restore_overwrite_done(result.added));
+
+    if (bundle?.binaryBytes != null) {
+      final current = await EbpfProxyData.getBinaryStatus();
+      final abi = (bundle!.manifest['abi'] ?? '').toString();
+      if (abi.isNotEmpty && current.abi.isNotEmpty && abi != current.abi) {
+        message.write('\n${s.restore_binary_skipped_abi(abi, current.abi)}');
+      } else {
+        try {
+          final info = bundle.manifest['binary'];
+          final map = info is Map
+              ? Map<String, dynamic>.from(info)
+              : <String, dynamic>{};
+          await EbpfProxyData.importBinary(
+            bytes: bundle.binaryBytes!,
+            packageVersion: (map['packageVersion'] ?? '').toString(),
+            versionCode: (map['versionCode'] as num?)?.toInt() ?? 0,
+            changelogUrl: (map['changelogUrl'] ?? '').toString(),
+            binaryVersion: (map['version'] ?? '').toString(),
+          );
+          message.write('\n${s.restore_binary_ok}');
+        } catch (e) {
+          message.write('\n${s.restore_binary_failed}: $e');
+        }
+      }
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message.toString()),
+      duration: const Duration(seconds: 4),
+    ));
+  }
+
+  /// 选择还原方式；返回 null 表示用户取消
+  Future<_RestoreMode?> _pickRestoreMode() {
+    final s = S.of(context);
+    return showDialog<_RestoreMode>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.restore_mode_title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(s.restore_mode_pick),
+            const SizedBox(height: 8.0),
+            Text(s.restore_mode_append_hint, style: const TextStyle(fontSize: 12.0)),
+            const SizedBox(height: 6.0),
+            Text(s.restore_mode_overwrite_hint,
+                style: const TextStyle(fontSize: 12.0, color: Colors.orange)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.text_cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _RestoreMode.append),
+            child: Text(s.restore_mode_append),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _RestoreMode.overwrite),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: Text(s.restore_mode_overwrite),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 构建设置页：主题/语言/MCP/更新/Wi-Fi/eBPF/备份还原/关于 各分区自上而下排列
@@ -417,20 +638,7 @@ class _AppSettingsState extends State<AppSettings> {
                         // 使用 outlined 风格图标，视觉上更轻量、更符合设置项样式
                         icon: const Icon(Icons.backup_outlined),
                         label: Text(S.of(context).text_backup),
-                        onPressed: () async {
-                          // debugPrint("---- 备份------");
-                          var fileName =
-                              'appproxy_backup_${DateTime.now().millisecondsSinceEpoch}.json';
-                          final bytes = await _proxyConfigData.toBytes();
-                          if (bytes.isNotEmpty) {
-                            final path = FilePicker.saveFile(fileName: fileName, bytes: bytes);
-                            debugPrint("备份文件路径: $path");
-                          }else{
-                            debugPrint("备份失败, 配置文件为空");
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(SnackBar(content: Text(S.of(context).backup_failed)));
-                          }
-                        },
+                        onPressed: _backupConfig,
                       ),
                     ),
                     // 竖分隔线用于区分"备份/还原"两个独立操作，
@@ -445,26 +653,7 @@ class _AppSettingsState extends State<AppSettings> {
                         ),
                         icon: const Icon(Icons.restore_outlined),
                         label: Text(S.of(context).text_restore),
-                        onPressed: () async {
-                          PlatformFile? file = await FilePicker.pickFile(
-                              type: FileType.custom,
-                              allowedExtensions: ['json']);
-                          if (file != null) {
-                            // 还原配置文件
-                            var state = await _proxyConfigData.fromBytes(await file.readAsBytes());
-                            if (state) {
-                              if (!mounted) return;
-                              context.read<RestoreCubit>().increment();
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(SnackBar(content: Text(S.of(context).restore_success)));
-                            } else {
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(SnackBar(content: Text(S.of(context).restore_failed)));
-                            }
-                          } else {
-                            debugPrint("还原失败, 未选择文件");
-                          }
-                        },
+                        onPressed: _restoreBackup,
                       ),
                     ),
                   ],

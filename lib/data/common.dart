@@ -8,6 +8,8 @@ class AppSetings {
   static const String _checkWifi = "isCheckWifi";
   static const String _iMcpPort = "iMcpPort";
   static const String _sAuthToken = "sAuthToken";
+  // 应用代理模式：include（勾选=代理，默认）/ exclude（勾选=排除直连）
+  static const String _appProxyMode = "appProxyMode";
   // ---- eBPF(sing-box) 引擎相关（设置页「eBPF 透明代理」分区）----
   // 注意：这些属于「设置侧」数据，**不参与备份/恢复**（备份只含 proxyConfig.json）
   static const String _ebpfDownloadBase = "ebpfDownloadBase"; // 自定义下载源，留空用官方
@@ -97,6 +99,18 @@ class AppSetings {
     return prefs.setString(_sAuthToken, value);
   }
 
+  /// 是否处于“排除模式”：勾选的应用走直连，其余走代理
+  static Future<bool> getAppProxyExcludeMode() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_appProxyMode) ?? "include") == "exclude";
+  }
+
+  /// 设置应用代理模式
+  static Future<bool> setAppProxyExcludeMode(bool exclude) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.setString(_appProxyMode, exclude ? "exclude" : "include");
+  }
+
   /// 二进制自定义下载源（留空 = 用官方 pfile 地址）
   static Future<String> getEbpfDownloadBase() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -147,5 +161,19 @@ class AppSetings {
       profiles.remove(name);
     }
     await setEbpfProfiles(profiles);
+  }
+
+  /// 配置改名时迁移 eBPF 标记（标记按配置名存储，不迁移会丢失开关/徽标）。
+  /// 返回迁移后的完整集合，调用方可直接刷新 UI。
+  static Future<Set<String>> renameEbpfProfile(String oldName, String newName) async {
+    if (oldName.isEmpty || newName.isEmpty || oldName == newName) {
+      return getEbpfProfiles();
+    }
+    final profiles = await _ebpfProfileSet();
+    if (profiles.remove(oldName)) {
+      profiles.add(newName);
+      await setEbpfProfiles(profiles);
+    }
+    return {...profiles};
   }
 }

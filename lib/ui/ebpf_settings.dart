@@ -3,6 +3,7 @@ import 'package:appproxy/data/ebpf_proxy_data.dart';
 import 'package:appproxy/generated/l10n.dart';
 import 'package:appproxy/ui/ebpf_log.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -259,6 +260,26 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
     );
   }
 
+  /// 从本机文件导入二进制（可在电脑上下载后拷到手机，绕过手机端下载慢）
+  Future<void> _importBinary() async {
+    final s = S.of(context);
+    try {
+      final file = await FilePicker.pickFile(type: FileType.any);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      final status = await EbpfProxyData.importBinary(bytes: bytes);
+      if (!mounted) return;
+      setState(() => _binary = status);
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.ebpf_import_binary_ok), backgroundColor: Colors.green));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('${s.ebpf_import_binary_failed}: $e')));
+    }
+  }
+
   /// 清理运行目录（保留已下载的二进制）
   Future<void> _cleanupRuntimeDir() async {
     final ok = await EbpfProxyData.cleanupRuntimeDir();
@@ -436,6 +457,13 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
                           style: const TextStyle(fontSize: 11.0),
                         ),
                       ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        s.ebpf_download_accel_hint,
+                        style: const TextStyle(fontSize: 11.0, color: Colors.grey),
+                      ),
+                    ),
                     Row(
                       children: [
                         // 更新说明：只要版本清单给了 changelog 就显示（不论当前是否已是最新）
@@ -472,6 +500,10 @@ class _EbpfSettingsPageState extends State<EbpfSettingsPage> {
               label: s.ebpf_download_base,
               value: _downloadBase.isEmpty ? s.ebpf_value_default : _downloadBase,
               onTap: _editDownloadBase,
+            ),
+            _rowCard(
+              label: s.ebpf_import_binary,
+              onTap: _importBinary,
             ),
             _rowCard(
               label: s.ebpf_view_log,

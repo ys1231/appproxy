@@ -19,7 +19,10 @@ class VpnServiceController(
 ) {
     private val TAG = "iyue->${this.javaClass.simpleName}"
     private var currentProxy: MutableMap<String, Any>? = HashMap()
-    private var fields = listOf("proxyPort","proxyPass","proxyName","proxyType","proxyUser","appProxyPackageList","proxyHost")
+    private var fields = listOf(
+        "proxyPort", "proxyPass", "proxyName", "proxyType", "proxyUser",
+        "appProxyPackageList", "appProxyMode", "appProxyExcludeList", "proxyHost"
+    )
 
     /** 注入/更新底层 VPN 服务引用（MainActivity 在服务连接成功后调用） */
     fun updateVpnService(newVpnService: IyueVPNService?) {

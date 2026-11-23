@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:appproxy/data/app_proxy_config_data.dart';
+import 'package:appproxy/data/common.dart';
 import 'package:appproxy/events/app_events.dart';
 import 'package:appproxy/generated/l10n.dart';
 import 'package:flutter/foundation.dart';
@@ -24,9 +25,13 @@ enum AppOption {
   showUserApp,
   // 系统app
   showSystemApp,
+  // 扫描分身/多开（隐藏用户，需要 root）
+  scanClones,
+  // 排除模式：勾选的应用走直连
+  excludeMode,
 }
 
-Future<List> invokeGetAppList(token) async {
+Future<List> invokeGetAppList(token, {bool includeRoot = false}) async {
   BackgroundIsolateBinaryMessenger.ensureInitialized(token);
   /**
    * 静态常量平台通道定义
@@ -34,8 +39,11 @@ Future<List> invokeGetAppList(token) async {
    * 它主要用于定义与原生平台通信的方法通道名称。
    */
   const platform = MethodChannel('cn.ys1231/appproxy');
-  // 远程调用获取应用列表
-  final appListString = await platform.invokeMethod('getAppList');
+  // 远程调用获取应用列表（includeRoot=true 时会额外枚举隐藏用户，可能请求 root）
+  final appListString = await platform.invokeMethod(
+    'getAppList',
+    {'includeRoot': includeRoot},
+  );
   List<dynamic> rawList = jsonDecode(appListString);
 
   // 处理每个应用的信息，包括 base64 解码
@@ -60,10 +68,11 @@ Future<List> invokeGetAppList(token) async {
   return processedList;
 }
 
-Future<List> getAppListInIsolate() async {
+Future<List> getAppListInIsolate({bool includeRoot = false}) async {
   RootIsolateToken rootIsolateToken = RootIsolateToken.instance!;
   // 其它线程获取应用列表
-  return Isolate.run(() => invokeGetAppList(rootIsolateToken));
+  return Isolate.run(
+      () => invokeGetAppList(rootIsolateToken, includeRoot: includeRoot));
 }
 
 class AppConfigState extends State<AppConfigList> {
@@ -93,6 +102,15 @@ class AppConfigState extends State<AppConfigList> {
   // 是否使用缓存数据
   bool _useCached = false;
 
+  // 是否已请求过扫描隐藏用户（分身/多开）；由右上角菜单主动触发，避免启动即弹 root
+  bool _scanRootClones = false;
+
+  // false = 勾选的应用走代理；true = 勾选的应用走直连（排除模式）
+  bool _excludeMode = false;
+
+  // 包名 -> 出现在几个用户里（>1 表示有分身；只用于决定是否显示用户号徽标）
+  Map<String, int> _packageUserCounts = {};
+
   // 新增菜单项支持选择用户app和系统app以及全选等动态避免刷新ui时始终不变
   bool _showUserAppSelected = true;
   bool _showSystemAppSelected = false;
@@ -107,8 +125,8 @@ class AppConfigState extends State<AppConfigList> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  // 当前选中的app列表
-  late final Map<String, bool> _selectedItemsMap;
+  // 当前选中的 app：key = UID 字符串（同一包名的主应用/分身 UID 不同）
+  Map<String, bool> _selectedItemsMap = {};
 
   // app列表配置文件
   final AppProxyConfigData _appfile = AppProxyConfigData("proxyconfig.json");
@@ -122,14 +140,21 @@ class AppConfigState extends State<AppConfigList> {
   // app bar
   bool _appActionSearchHide = false;
 
-  // 初始化数据
+  /// 初始化数据：勾选表现在按 UID 存储（key = uid 字符串）
   Future<void> _initData() async {
     _selectedItemsMap = await _appfile.readAppConfig();
-    // 同步已选择历史数据
-    for (var key in _selectedItemsMap.keys) {
-      if (_selectedItemsMap[key] == true) {
-        appProxyPackageList.add(key);
-      }
+    _excludeMode = await AppSetings.getAppProxyExcludeMode();
+    if (mounted) setState(() {});
+    // 先用已保存的 UID 填充全局选择，eBPF 在列表加载完成前也能拿到准确 UID；
+    // 包名/用户等元数据等 getAppList 后由 _rebuildSelection 补齐。
+    final uids = <int>[];
+    for (final entry in _selectedItemsMap.entries) {
+      if (entry.value != true) continue;
+      final uid = int.tryParse(entry.key);
+      if (uid != null && uid > 0) uids.add(uid);
+    }
+    if (uids.isNotEmpty) {
+      appProxySelection.replaceUids(uids);
     }
   }
 
@@ -138,7 +163,9 @@ class AppConfigState extends State<AppConfigList> {
   void initState() {
     super.initState();
     debugPrint("iyue-> initState");
-    _initData();
+    _initData().then((_) {
+      if (mounted) getAppList();
+    });
     platform.setMethodCallHandler((call) async {
       if (call.method == 'onRefresh') {
         // 执行Flutter逻辑
@@ -146,6 +173,74 @@ class AppConfigState extends State<AppConfigList> {
         getAppList();
       }
     });
+  }
+
+  String _uidKey(Map<dynamic, dynamic> app) =>
+      '${(app['uid'] as num?)?.toInt() ?? 0}';
+
+  /// 旧版本按包名保存勾选；加载列表后迁移成“所有同名实例的 UID 都选中”
+  void _migrateLegacySelection() {
+    var changed = false;
+    final legacyKeys = _selectedItemsMap.keys
+        .where((k) => int.tryParse(k) == null)
+        .toList();
+    for (final key in legacyKeys) {
+      final selected = _selectedItemsMap[key] == true;
+      if (selected) {
+        for (final app in _cachedAppListInfo) {
+          if ((app['packageName'] ?? '').toString() == key) {
+            final uid = (app['uid'] as num?)?.toInt() ?? 0;
+            if (uid > 0) _selectedItemsMap['$uid'] = true;
+          }
+        }
+      }
+      _selectedItemsMap.remove(key);
+      changed = true;
+    }
+    if (changed) {
+      _appfile.saveAppConfig(_selectedItemsMap);
+      debugPrint('migrateLegacySelection: ${legacyKeys.length} legacy keys');
+    }
+  }
+
+  /// 根据完整应用列表重建全局选择（含 UID/包名/是否分身）。
+  ///
+  /// 已选 UID 若当前列表里没有（重启后未扫描隐藏用户/分身），仍保留 UID：
+  /// eBPF 可以继续按 UID 精确代理；VPN 则标记 metadataReady=false 让启动流程
+  /// 提示先扫描，避免把“有选择”误当成“全机代理”。
+  void _rebuildSelection() {
+    final selected = <AppProxyEntry>[];
+    final found = <int>{};
+    for (final app in _cachedAppListInfo) {
+      final uid = (app['uid'] as num?)?.toInt() ?? 0;
+      if (uid <= 0) continue;
+      if (_selectedItemsMap['$uid'] != true) continue;
+      found.add(uid);
+      selected.add(AppProxyEntry(
+        uid: uid,
+        userId: (app['userId'] as num?)?.toInt() ?? 0,
+        packageName: (app['packageName'] ?? '').toString(),
+        multiUser: app['multiUser'] == true,
+      ));
+    }
+    var incomplete = false;
+    for (final entry in _selectedItemsMap.entries) {
+      if (entry.value != true) continue;
+      final uid = int.tryParse(entry.key);
+      if (uid == null || uid <= 0 || found.contains(uid)) continue;
+      // 当前用户 id 由 UID 推算（app UID = userId*100000 + appId）
+      final userId = uid ~/ 100000;
+      selected.add(AppProxyEntry(
+        uid: uid,
+        userId: userId,
+        packageName: '',
+        multiUser: userId != 0,
+      ));
+      incomplete = true;
+    }
+    appProxySelection.replaceAll(selected, metadataReady: !incomplete);
+    debugPrint('rebuildSelection: ${appProxySelection.debugSummary()} '
+        'incomplete=$incomplete');
   }
 
 
@@ -170,23 +265,66 @@ class AppConfigState extends State<AppConfigList> {
     });
   }
 
-  /// 全选/全不选：批量更新勾选并把包名集合同步到全局 appProxyPackageList
+  /// 全选/全不选：批量更新勾选（按 UID），并同步全局选择
   void updateSelectAll(isSelectAll) {
     setState(() {
       debugPrint("updateSelectAll:$isSelectAll");
       if (isSelectAll) {
         for (var app in _jsonAppListInfo) {
-          _selectedItemsMap[app["packageName"]] = true;
-          // 添加到代理列表
-          appProxyPackageList.add(app["packageName"]);
+          final uid = (app["uid"] as num?)?.toInt() ?? 0;
+          if (uid > 0) _selectedItemsMap['$uid'] = true;
         }
       } else {
         _selectedItemsMap.clear();
-        appProxyPackageList.clear();
       }
-      // 并且更新本地数据
       _appfile.saveAppConfig(_selectedItemsMap);
+      _rebuildSelection();
     });
+  }
+
+  /// 整理原生应用列表：**每个用户/分身单独一行**，每行有自己的 UID。
+  ///
+  /// 勾选按 UID 保存，所以主应用（用户 0）和分身（如用户 999）可以分别选择。
+  List<Map<String, dynamic>> _prepareAppList(List raw) {
+    final result = <Map<String, dynamic>>[];
+    final seen = <String>{};
+    final counts = <String, int>{};
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final pkg = (item['packageName'] ?? '').toString();
+      if (pkg.isEmpty) continue;
+      final userId = (item['userId'] as num?)?.toInt() ?? 0;
+      final uid = (item['uid'] as num?)?.toInt() ?? 0;
+      if (uid <= 0) continue;
+      final key = '$userId/$pkg';
+      if (!seen.add(key)) continue;
+      final copy = Map<String, dynamic>.from(item);
+      copy['userId'] = userId;
+      copy['uid'] = uid;
+      copy['multiUser'] = item['multiUser'] == true;
+      result.add(copy);
+      counts[pkg] = (counts[pkg] ?? 0) + 1;
+    }
+    // 让同一包名的原应用/分身相邻显示，便于对照
+    result.sort((a, b) {
+      final byPkg = (a['packageName'] ?? '')
+          .toString()
+          .compareTo((b['packageName'] ?? '').toString());
+      if (byPkg != 0) return byPkg;
+      return ((a['userId'] as num?)?.toInt() ?? 0)
+          .compareTo((b['userId'] as num?)?.toInt() ?? 0);
+    });
+    _packageUserCounts = counts;
+    debugPrint("prepareAppList: ${result.length} rows");
+    return result;
+  }
+
+  /// 应用副标题：包名；排除模式下已勾选条目标注“直连”
+  String _appSubtitle(S s, Map<String, dynamic> item) {
+    final pkg = (item['packageName'] ?? '').toString();
+    final direct =
+        _excludeMode && _selectedItemsMap[_uidKey(item)] == true;
+    return direct ? '$pkg · ${s.app_direct}' : pkg;
   }
 
   // 远程调用获取Android 应用列表
@@ -197,13 +335,18 @@ class AppConfigState extends State<AppConfigList> {
         _cachedAppListInfo.clear();
         // 多线程获取应用列表
         debugPrint("iyue-> call  getAppListInIsolate");
-        _cachedAppListInfo = await getAppListInIsolate();
+        _cachedAppListInfo = _prepareAppList(
+            await getAppListInIsolate(includeRoot: _scanRootClones));
         debugPrint("iyue-> call  getAppListInIsolate end");
         // 获取之后使用缓存数据
         _useCached = true;
         debugPrint("call update app list!");
         setState(() {});
       }
+
+      // 旧包名勾选迁移到 UID，并重建全局选择（每行按 UID 独立）
+      _migrateLegacySelection();
+      _rebuildSelection();
 
       _jsonAppListInfo.clear();
       _systemAppListInfo.clear();
@@ -225,19 +368,21 @@ class AppConfigState extends State<AppConfigList> {
         _jsonAppListInfo.addAll(_userAppListInfo);
       }
 
-      // 把已选择的移到前面去
-      _jsonAppListInfo.sort((a, b) {
-        bool? itemASelected = _selectedItemsMap[a["packageName"]] ?? false;
-        bool? itemBSelected = _selectedItemsMap[b["packageName"]] ?? false;
-        // 如果两个都未选中，保持原顺序
-        if (!itemASelected && !itemBSelected) return 0;
-        // 如果A被选中，放在前面
-        if (itemASelected && !itemBSelected) return -1;
-        // 如果B被选中，放在前面
-        if (!itemASelected && itemBSelected) return 1;
-        // 如果两个都已选中，按原始顺序
-        return 0;
-      });
+      // 已勾选的稳定排到最前（分区而不是 sort，避免 Dart 非稳定排序打乱顺序）
+      final selectedApps = <Map<String, dynamic>>[];
+      final otherApps = <Map<String, dynamic>>[];
+      for (final app in _jsonAppListInfo) {
+        final item = Map<String, dynamic>.from(app as Map);
+        if (_selectedItemsMap[_uidKey(item)] == true) {
+          selectedApps.add(item);
+        } else {
+          otherApps.add(item);
+        }
+      }
+      _jsonAppListInfo
+        ..clear()
+        ..addAll(selectedApps)
+        ..addAll(otherApps);
       _itemCount = _jsonAppListInfo.length;
 
       return true;
@@ -295,7 +440,8 @@ class AppConfigState extends State<AppConfigList> {
 
     return Scaffold(
         appBar: AppBar(
-            title: Text('APP ${S.of(context).text_app_config_list}'),
+            title: Text('APP ${S.of(context).text_app_config_list}'
+                '${_excludeMode ? ' · ${S.of(context).app_exclude_mode_badge}' : ''}'),
             backgroundColor: Theme.of(context).primaryColor,
             actions: <Widget>[
               AnimatedCrossFade(
@@ -364,6 +510,25 @@ class AppConfigState extends State<AppConfigList> {
                         updateShowSystemApp(_showSystemAppSelected);
                         _selectAll = false;
                         break;
+                      case AppOption.scanClones:
+                        // 隐藏用户（应用分身/多开）只有 root 能枚举；
+                        // 只在用户主动选择时触发，避免打开 App 就弹授权框
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(S.of(context).text_scan_clones_hint)));
+                        setState(() {
+                          _scanRootClones = true;
+                          _useCached = false;
+                          getAppList();
+                        });
+                        break;
+                      case AppOption.excludeMode:
+                        setState(() {
+                          _excludeMode = !_excludeMode;
+                        });
+                        AppSetings.setAppProxyExcludeMode(_excludeMode);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(S.of(context).app_exclude_mode_hint)));
+                        break;
                     }
                   },
                   itemBuilder: (BuildContext context) {
@@ -381,7 +546,15 @@ class AppConfigState extends State<AppConfigList> {
                       CheckedPopupMenuItem<AppOption>(
                           checked: _showSystemAppSelected,
                           value: AppOption.showSystemApp,
-                          child: Text(S.of(context).text_show_system_app))
+                          child: Text(S.of(context).text_show_system_app)),
+                      CheckedPopupMenuItem<AppOption>(
+                          checked: _scanRootClones,
+                          value: AppOption.scanClones,
+                          child: Text(S.of(context).text_scan_clones)),
+                      CheckedPopupMenuItem<AppOption>(
+                          checked: _excludeMode,
+                          value: AppOption.excludeMode,
+                          child: Text(S.of(context).app_exclude_mode))
                     ];
                   })
             ]),
@@ -431,29 +604,61 @@ class AppConfigState extends State<AppConfigList> {
                                   ? Image.memory(itemMap["iconBytes"], fit: BoxFit.cover)
                                   : const Icon(Icons.accessibility),
                             ),
-                            // 标题
-                            title: Text(itemMap["label"]),
-                            // 副标题
-                            subtitle: Text(itemMap["packageName"]),
-                            // 显示一个复选框
+                            // 标题（含分身时加标识）
+                            title: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '${itemMap["label"]}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                // 分身行始终显示用户号；主应用仅在“同包名有分身”时显示，
+                                // 方便区分“用户 0 / 用户 999”并分别勾选
+                                if (itemMap["multiUser"] == true ||
+                                    ((_packageUserCounts[
+                                                '${itemMap["packageName"]}'] ??
+                                            1) >
+                                        1)) ...[
+                                  const SizedBox(width: 6.0),
+                                  Builder(builder: (context) {
+                                    final isClone = itemMap["multiUser"] == true;
+                                    final color =
+                                        isClone ? Colors.deepPurple : Colors.blueGrey;
+                                    final userId =
+                                        (itemMap["userId"] as num?)?.toInt() ?? 0;
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 5.0, vertical: 1.0),
+                                      decoration: BoxDecoration(
+                                        color: color.withAlpha(30),
+                                        borderRadius: BorderRadius.circular(4.0),
+                                        border: Border.all(color: color.withAlpha(100)),
+                                      ),
+                                      child: Text(
+                                        '${S.of(context).app_user_prefix} $userId',
+                                        style: TextStyle(fontSize: 10.0, color: color),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                            // 副标题：包名 + 分身所在用户/资料
+                            subtitle: Text(
+                              _appSubtitle(S.of(context), itemMap),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            // 显示一个复选框（按 UID 独立保存，主应用/分身互不影响）
                             trailing: CardCheckbox(
                                 key: _cardKeys[c_index],
-                                // 根据是否选中列表初始化状态
-                                isSelected: _selectedItemsMap[itemMap["packageName"]] ?? false,
-                                // 子控件回调这个函数更新界面对应的数据
+                                isSelected:
+                                    _selectedItemsMap[_uidKey(itemMap)] ?? false,
                                 callbackOnChanged: (newValue) {
-                                  // 更新显示搜索框
                                   _appActionSearchHide = true;
-                                  // 如果选中了，添加到代理列表
-                                  _selectedItemsMap[itemMap["packageName"]] = newValue;
-                                  // 并且更新本地数据
+                                  _selectedItemsMap[_uidKey(itemMap)] = newValue;
                                   _appfile.saveAppConfig(_selectedItemsMap);
-                                  if (newValue) {
-                                    // 添加到代理列表
-                                    appProxyPackageList.add(itemMap["packageName"]);
-                                  } else {
-                                    appProxyPackageList.remove(itemMap["packageName"]);
-                                  }
+                                  _rebuildSelection();
                                   setState(() {
                                     getAppList();
                                   });
