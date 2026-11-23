@@ -44,9 +44,11 @@ class AppProxySelection {
     metadataReady = false;
   }
 
-  void replaceAll(Iterable<AppProxyEntry> entries) {
+  /// [metadataReady] 为 false 表示有选中 UID 在当前列表里找不到元数据
+  /// （例如重启后还没扫描分身）；此时 eBPF 仍可按 UID 工作，VPN 需要先扫描。
+  void replaceAll(Iterable<AppProxyEntry> entries, {bool metadataReady = true}) {
     _entries = {for (final e in entries) e.uid: e};
-    metadataReady = true;
+    this.metadataReady = metadataReady;
   }
 
   void setSelected(AppProxyEntry entry, bool selected) {

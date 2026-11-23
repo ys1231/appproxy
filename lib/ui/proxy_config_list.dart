@@ -238,16 +238,16 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     final engine = _ebpfProfiles.contains(data["proxyName"]) ? "ebpf" : "tun2socks";
     final selection = appProxySelection;
-    // 勾选只恢复到了 UID、应用列表还没加载完时，拒绝启动：
-    // 否则 VPN 会拿不到包名而变成全机代理
+    if (engine == "ebpf") {
+      // eBPF 用 UID 精确代理；即使应用列表还没补齐元数据也能启动
+      await _startEbpfProxy(data);
+      return;
+    }
+    // VPN 依赖包名：有勾选但当前列表找不到对应元数据时先拒绝，避免变成全机代理
     if (selection.uids.isNotEmpty && !selection.metadataReady) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context).app_list_loading)));
-      return;
-    }
-    if (engine == "ebpf") {
-      await _startEbpfProxy(data);
+          SnackBar(content: Text(S.of(context).app_selection_need_scan)));
       return;
     }
     // VPN(VpnService) 只作用于当前 Android 用户，无法接管分身/工作资料里的应用

@@ -44,6 +44,21 @@ void main() {
       expect(selection.metadataReady, isTrue);
       expect(selection.currentUserPackages, ['com.tencent.mm']);
     });
+
+    test('未解析的已选 UID 仍保留，供 eBPF 使用', () {
+      final selection = AppProxySelection();
+      selection.replaceAll([
+        const AppProxyEntry(
+          uid: 99910230,
+          userId: 999,
+          packageName: '',
+          multiUser: true,
+        ),
+      ], metadataReady: false);
+      expect(selection.uids, [99910230]);
+      expect(selection.metadataReady, isFalse);
+      expect(selection.currentUserPackages, isEmpty);
+    });
   });
 
   group('EbpfConfigGenerator include_uid', () {

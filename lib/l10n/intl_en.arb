@@ -264,5 +264,6 @@
   },
   "app_clone_only_vpn_title": "VPN cannot proxy clones",
   "app_clone_only_vpn_msg": "Only cloned apps are selected. Android VPN only applies to the current user, so clones in other users cannot be proxied.\nSwitch this proxy config to the eBPF engine, or also select the main app.",
-  "app_list_loading": "App list is loading, please try again shortly"
+  "app_list_loading": "App list is loading, please try again shortly",
+  "app_selection_need_scan": "The selection includes clones that are not loaded yet. Tap “Scan cloned apps” on the config page before starting VPN."
 }

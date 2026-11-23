@@ -264,5 +264,6 @@
   },
   "app_clone_only_vpn_title": "VPN 不能代理分身",
   "app_clone_only_vpn_msg": "当前只勾选了分身应用。系统 VPN 只能作用于当前用户，无法代理其它用户里的分身。\n请把这条代理配置的引擎切换为 eBPF 后再启动，或同时勾选主应用。",
-  "app_list_loading": "应用列表加载中，请稍后再试"
+  "app_list_loading": "应用列表加载中，请稍后再试",
+  "app_selection_need_scan": "当前勾选包含未加载的分身应用，请到配置页点“扫描分身/多开应用”后再启动 VPN"
 }

@@ -195,13 +195,19 @@ class AppConfigState extends State<AppConfigList> {
     }
   }
 
-  /// 根据完整应用列表重建全局选择（含 UID/包名/是否分身）
+  /// 根据完整应用列表重建全局选择（含 UID/包名/是否分身）。
+  ///
+  /// 已选 UID 若当前列表里没有（重启后未扫描隐藏用户/分身），仍保留 UID：
+  /// eBPF 可以继续按 UID 精确代理；VPN 则标记 metadataReady=false 让启动流程
+  /// 提示先扫描，避免把“有选择”误当成“全机代理”。
   void _rebuildSelection() {
     final selected = <AppProxyEntry>[];
+    final found = <int>{};
     for (final app in _cachedAppListInfo) {
       final uid = (app['uid'] as num?)?.toInt() ?? 0;
       if (uid <= 0) continue;
       if (_selectedItemsMap['$uid'] != true) continue;
+      found.add(uid);
       selected.add(AppProxyEntry(
         uid: uid,
         userId: (app['userId'] as num?)?.toInt() ?? 0,
@@ -209,8 +215,24 @@ class AppConfigState extends State<AppConfigList> {
         multiUser: app['multiUser'] == true,
       ));
     }
-    appProxySelection.replaceAll(selected);
-    debugPrint('rebuildSelection: ${appProxySelection.debugSummary()}');
+    var incomplete = false;
+    for (final entry in _selectedItemsMap.entries) {
+      if (entry.value != true) continue;
+      final uid = int.tryParse(entry.key);
+      if (uid == null || uid <= 0 || found.contains(uid)) continue;
+      // 当前用户 id 由 UID 推算（app UID = userId*100000 + appId）
+      final userId = uid ~/ 100000;
+      selected.add(AppProxyEntry(
+        uid: uid,
+        userId: userId,
+        packageName: '',
+        multiUser: userId != 0,
+      ));
+      incomplete = true;
+    }
+    appProxySelection.replaceAll(selected, metadataReady: !incomplete);
+    debugPrint('rebuildSelection: ${appProxySelection.debugSummary()} '
+        'incomplete=$incomplete');
   }
 
 
