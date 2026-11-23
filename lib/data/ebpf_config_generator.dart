@@ -98,6 +98,7 @@ class EbpfConfigGenerator {
     required Map<String, dynamic> proxy,
     required List<String> packageList,
     List<int>? uidList,
+    bool exclude = false,
     required String selfPackage,
     bool cgroupSupported = true,
     bool socketAssignSupported = true,
@@ -160,7 +161,7 @@ class EbpfConfigGenerator {
 
     debugPrint('EbpfConfigGenerator.build: type=$proxyType network=$networkMode '
         'dataPlane=$dataPlane dnsMode=${opts.effectiveDnsMode} '
-        'dnsServers=${opts.dnsServers.length} uids=$uidList '
+        'dnsServers=${opts.dnsServers.length} uids=$uidList exclude=$exclude '
         'packages=${packageList.length} customOverride=${customOverride != null}');
 
     // ---- outbounds：唯一的出口：你填的那个代理 ----
@@ -200,17 +201,24 @@ class EbpfConfigGenerator {
         .where((e) => e > 0)
         .toSet()
         .toList();
+    final excludePackages = <String>[];
     if (uids.isNotEmpty) {
-      // UID 精确选择：可只代理主应用（用户 0）或只代理分身（如用户 999）。
+      // UID 精确选择：include = 只代理这些 UID；exclude = 这些 UID 走直连。
       // 注意此时不能再写 include_package，否则会把这些包名在所有用户下的 UID 都纳入。
-      local['include_uid'] = uids;
-    } else if (packageList.isNotEmpty) {
+      local[exclude ? 'exclude_uid' : 'include_uid'] = uids;
+    } else if (!exclude && packageList.isNotEmpty) {
       // 兼容按包名选择的旧逻辑/MCP：**不写** include_package = 全部 app 都接管
       local['include_package'] = packageList;
+    } else if (exclude && packageList.isNotEmpty) {
+      // 排除模式的包名回退（MCP/旧选择）：这些包名走直连
+      excludePackages.addAll(packageList);
     }
     if (selfPackage.isNotEmpty) {
       // 排除自己：否则本 app 自己的网络请求（如 MCP 服务、检查更新）也会被绕进代理
-      local['exclude_package'] = [selfPackage];
+      excludePackages.add(selfPackage);
+    }
+    if (excludePackages.isNotEmpty) {
+      local['exclude_package'] = excludePackages.toSet().toList();
     }
 
     // ---- route / dns：由选项模型驱动 ----

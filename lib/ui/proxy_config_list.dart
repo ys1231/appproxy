@@ -238,9 +238,10 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     }
     final engine = _ebpfProfiles.contains(data["proxyName"]) ? "ebpf" : "tun2socks";
     final selection = appProxySelection;
+    final excludeMode = await AppSetings.getAppProxyExcludeMode();
     if (engine == "ebpf") {
-      // eBPF 用 UID 精确代理；即使应用列表还没补齐元数据也能启动
-      await _startEbpfProxy(data);
+      // eBPF 用 UID 精确代理/排除；即使应用列表还没补齐元数据也能启动
+      await _startEbpfProxy(data, excludeMode: excludeMode);
       return;
     }
     // VPN 依赖包名：有勾选但当前列表找不到对应元数据时先拒绝，避免变成全机代理
@@ -250,8 +251,9 @@ class _ProxyListHomeState extends State<ProxyListHome> {
           SnackBar(content: Text(S.of(context).app_selection_need_scan)));
       return;
     }
-    // VPN(VpnService) 只作用于当前 Android 用户，无法接管分身/工作资料里的应用
-    if (selection.hasNonCurrentUser) {
+    // 只有 include 模式才需要提醒“VPN 无法代理分身”：
+    // exclude 模式是全局代理 + 勾选直连，分身本来就在 VPN 覆盖范围之外
+    if (!excludeMode && selection.hasNonCurrentUser) {
       if (!selection.hasCurrentUser) {
         // 只勾选了分身：VPN 一个都代理不了，直接拦截并引导用 eBPF
         await _showCloneOnlyVpnBlocked();
@@ -264,8 +266,16 @@ class _ProxyListHomeState extends State<ProxyListHome> {
     await _stopOtherEngine("tun2socks");
     _isSelectedProxyName = data["proxyName"];
     _currentProxyData = data;
-    // VPN 只传当前用户的包名；分身选择被忽略（上面已提示）
-    _currentProxyData['appProxyPackageList'] = selection.getListString();
+    _currentProxyData['appProxyMode'] = excludeMode ? 'exclude' : 'include';
+    if (excludeMode) {
+      // 排除模式：勾选列表 → 直连；空列表 = 全部走代理
+      _currentProxyData['appProxyExcludeList'] = selection.getListString();
+      _currentProxyData['appProxyPackageList'] = '[]';
+    } else {
+      // include 模式：勾选列表 → 只代理这些；空列表 = 全部走代理
+      _currentProxyData['appProxyPackageList'] = selection.getListString();
+      _currentProxyData.remove('appProxyExcludeList');
+    }
     try {
       bool result = await platform.invokeMethod('startVpn', _currentProxyData);
       if (result) {
@@ -289,7 +299,8 @@ class _ProxyListHomeState extends State<ProxyListHome> {
   ///   2. 互斥          — 若 tun2socks(VPN) 正在跑，先停掉（两条链路不能同时接管流量）
   ///   3. 生成 config.json — outbounds 完全跟随本条配置；分应用列表 → include_package；自身包名 → exclude_package
   ///   4. 交给原生启动   — 原生负责部署二进制、root 起进程、看门狗；失败会把日志尾部原样弹出来
-  Future<void> _startEbpfProxy(Map<String, dynamic> data) async {
+  Future<void> _startEbpfProxy(Map<String, dynamic> data,
+      {bool excludeMode = false}) async {
     // 1) 前置校验：本机检测必须通过（读缓存，不跑命令）
     final support = await EbpfProxyData.getSupportStatus();
     if (!support.supported) {
@@ -331,6 +342,7 @@ class _ProxyListHomeState extends State<ProxyListHome> {
         proxy: configData,
         packageList: appProxySelection.packages.toList(),
         uidList: appProxySelection.uids,
+        exclude: excludeMode,
         selfPackage: selfPackage,
         cgroupSupported: support.cgroup,
         socketAssignSupported: support.socketAssign,

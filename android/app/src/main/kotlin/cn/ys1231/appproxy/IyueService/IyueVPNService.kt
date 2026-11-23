@@ -80,11 +80,15 @@ class IyueVPNService : VpnService() {
      * 启动 VPN：建 TUN（含分应用过滤）→ 把 fd 与代理地址交给 tun2socks 引擎。
      *
      * @param data 代理配置：proxyName/proxyHost/proxyPort/proxyType/proxyUser/proxyPass/
-     *             appProxyPackageList（JSON 字符串数组）
+     *             appProxyMode（include/exclude）、appProxyPackageList / appProxyExcludeList（JSON 数组）
      *
      * 分应用规则（与 eBPF 侧同义）：
-     *   - 列表为空 → addDisallowedApplication(自己) ⇒ 代理"除自己外所有应用"
-     *   - 列表非空 → 逐个 addAllowedApplication ⇒ 只代理列表内的应用（找不到的包名忽略并记日志）
+     *   include 模式（默认）：
+     *     - 列表为空 → addDisallowedApplication(自己) ⇒ 代理"除自己外所有应用"
+     *     - 列表非空 → 逐个 addAllowedApplication ⇒ 只代理列表内的应用
+     *   exclude 模式：
+     *     - 排除列表里的应用直连，其余应用走代理；自己始终排除
+     *     - 其它用户/分身的包在当前用户下 addDisallowedApplication 会失败，VPN 本来也覆盖不到，忽略
      */
     fun startVpnService(data: Map<String, Any>) {
         Log.d(TAG, "startVpnService: $data")
@@ -123,16 +127,40 @@ class IyueVPNService : VpnService() {
             .setMtu(1500)
 //            .addDnsServer("192.168.10.1")
             .setSession(packageName)
-        val allowedApps = jsonToList(data["appProxyPackageList"].toString())
-        if(allowedApps.isEmpty()){
+        // appProxyMode=exclude：勾选列表是“排除（直连）”，其余应用走代理；
+        // 默认 include：勾选列表是“只代理这些应用”。
+        // VpnService.Builder 的 allow/disallow 不能混用。
+        val mode = data["appProxyMode"]?.toString() ?: "include"
+        if (mode == "exclude") {
             builder.addDisallowedApplication(packageName)
-        }else{
-            for (appPackageName in allowedApps) {
+            val excludedApps = try {
+                jsonToList((data["appProxyExcludeList"] ?: "[]").toString())
+            } catch (e: Exception) {
+                Log.e(TAG, "parse appProxyExcludeList: ${e.message}")
+                emptyList()
+            }
+            for (appPackageName in excludedApps) {
+                if (appPackageName == packageName) continue
                 try {
-                    Log.d(TAG, "addAllowedApplication: $appPackageName")
-                    builder.addAllowedApplication(appPackageName)
+                    Log.d(TAG, "addDisallowedApplication(exclude): $appPackageName")
+                    builder.addDisallowedApplication(appPackageName)
                 } catch (e: Exception) {
-                    Log.e(TAG, "addAllowedApplication: ${e.message}")
+                    // 分身/其它用户的包在当前用户下不存在，VPN 本来也覆盖不到，忽略
+                    Log.e(TAG, "addDisallowedApplication: ${e.message}")
+                }
+            }
+        } else {
+            val allowedApps = jsonToList((data["appProxyPackageList"] ?: "[]").toString())
+            if (allowedApps.isEmpty()) {
+                builder.addDisallowedApplication(packageName)
+            } else {
+                for (appPackageName in allowedApps) {
+                    try {
+                        Log.d(TAG, "addAllowedApplication: $appPackageName")
+                        builder.addAllowedApplication(appPackageName)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "addAllowedApplication: ${e.message}")
+                    }
                 }
             }
         }

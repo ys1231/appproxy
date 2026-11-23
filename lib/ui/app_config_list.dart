@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:appproxy/data/app_proxy_config_data.dart';
+import 'package:appproxy/data/common.dart';
 import 'package:appproxy/events/app_events.dart';
 import 'package:appproxy/generated/l10n.dart';
 import 'package:flutter/foundation.dart';
@@ -26,6 +27,8 @@ enum AppOption {
   showSystemApp,
   // 扫描分身/多开（隐藏用户，需要 root）
   scanClones,
+  // 排除模式：勾选的应用走直连
+  excludeMode,
 }
 
 Future<List> invokeGetAppList(token, {bool includeRoot = false}) async {
@@ -102,6 +105,9 @@ class AppConfigState extends State<AppConfigList> {
   // 是否已请求过扫描隐藏用户（分身/多开）；由右上角菜单主动触发，避免启动即弹 root
   bool _scanRootClones = false;
 
+  // false = 勾选的应用走代理；true = 勾选的应用走直连（排除模式）
+  bool _excludeMode = false;
+
   // 包名 -> 出现在几个用户里（>1 表示有分身；只用于决定是否显示用户号徽标）
   Map<String, int> _packageUserCounts = {};
 
@@ -137,6 +143,8 @@ class AppConfigState extends State<AppConfigList> {
   /// 初始化数据：勾选表现在按 UID 存储（key = uid 字符串）
   Future<void> _initData() async {
     _selectedItemsMap = await _appfile.readAppConfig();
+    _excludeMode = await AppSetings.getAppProxyExcludeMode();
+    if (mounted) setState(() {});
     // 先用已保存的 UID 填充全局选择，eBPF 在列表加载完成前也能拿到准确 UID；
     // 包名/用户等元数据等 getAppList 后由 _rebuildSelection 补齐。
     final uids = <int>[];
@@ -311,9 +319,12 @@ class AppConfigState extends State<AppConfigList> {
     return result;
   }
 
-  /// 应用副标题：包名
+  /// 应用副标题：包名；排除模式下已勾选条目标注“直连”
   String _appSubtitle(S s, Map<String, dynamic> item) {
-    return (item['packageName'] ?? '').toString();
+    final pkg = (item['packageName'] ?? '').toString();
+    final direct =
+        _excludeMode && _selectedItemsMap[_uidKey(item)] == true;
+    return direct ? '$pkg · ${s.app_direct}' : pkg;
   }
 
   // 远程调用获取Android 应用列表
@@ -357,19 +368,21 @@ class AppConfigState extends State<AppConfigList> {
         _jsonAppListInfo.addAll(_userAppListInfo);
       }
 
-      // 把已选择的移到前面去（按 UID 判断，主应用/分身可独立）
-      _jsonAppListInfo.sort((a, b) {
-        bool? itemASelected = _selectedItemsMap[_uidKey(a)] ?? false;
-        bool? itemBSelected = _selectedItemsMap[_uidKey(b)] ?? false;
-        // 如果两个都未选中，保持原顺序
-        if (!itemASelected && !itemBSelected) return 0;
-        // 如果A被选中，放在前面
-        if (itemASelected && !itemBSelected) return -1;
-        // 如果B被选中，放在前面
-        if (!itemASelected && itemBSelected) return 1;
-        // 如果两个都已选中，按原始顺序
-        return 0;
-      });
+      // 已勾选的稳定排到最前（分区而不是 sort，避免 Dart 非稳定排序打乱顺序）
+      final selectedApps = <Map<String, dynamic>>[];
+      final otherApps = <Map<String, dynamic>>[];
+      for (final app in _jsonAppListInfo) {
+        final item = Map<String, dynamic>.from(app as Map);
+        if (_selectedItemsMap[_uidKey(item)] == true) {
+          selectedApps.add(item);
+        } else {
+          otherApps.add(item);
+        }
+      }
+      _jsonAppListInfo
+        ..clear()
+        ..addAll(selectedApps)
+        ..addAll(otherApps);
       _itemCount = _jsonAppListInfo.length;
 
       return true;
@@ -427,7 +440,8 @@ class AppConfigState extends State<AppConfigList> {
 
     return Scaffold(
         appBar: AppBar(
-            title: Text('APP ${S.of(context).text_app_config_list}'),
+            title: Text('APP ${S.of(context).text_app_config_list}'
+                '${_excludeMode ? ' · ${S.of(context).app_exclude_mode_badge}' : ''}'),
             backgroundColor: Theme.of(context).primaryColor,
             actions: <Widget>[
               AnimatedCrossFade(
@@ -507,6 +521,14 @@ class AppConfigState extends State<AppConfigList> {
                           getAppList();
                         });
                         break;
+                      case AppOption.excludeMode:
+                        setState(() {
+                          _excludeMode = !_excludeMode;
+                        });
+                        AppSetings.setAppProxyExcludeMode(_excludeMode);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(S.of(context).app_exclude_mode_hint)));
+                        break;
                     }
                   },
                   itemBuilder: (BuildContext context) {
@@ -528,7 +550,11 @@ class AppConfigState extends State<AppConfigList> {
                       CheckedPopupMenuItem<AppOption>(
                           checked: _scanRootClones,
                           value: AppOption.scanClones,
-                          child: Text(S.of(context).text_scan_clones))
+                          child: Text(S.of(context).text_scan_clones)),
+                      CheckedPopupMenuItem<AppOption>(
+                          checked: _excludeMode,
+                          value: AppOption.excludeMode,
+                          child: Text(S.of(context).app_exclude_mode))
                     ];
                   })
             ]),

@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:appproxy/data/common.dart';
 import 'package:appproxy/data/ebpf_config_generator.dart';
 import 'package:appproxy/events/app_events.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('AppProxySelection', () {
@@ -58,6 +60,63 @@ void main() {
       expect(selection.uids, [99910230]);
       expect(selection.metadataReady, isFalse);
       expect(selection.currentUserPackages, isEmpty);
+    });
+  });
+
+  group('排除模式', () {
+    test('AppSetings 持久化 include/exclude', () async {
+      SharedPreferences.setMockInitialValues({});
+      expect(await AppSetings.getAppProxyExcludeMode(), isFalse);
+      await AppSetings.setAppProxyExcludeMode(true);
+      expect(await AppSetings.getAppProxyExcludeMode(), isTrue);
+      await AppSetings.setAppProxyExcludeMode(false);
+      expect(await AppSetings.getAppProxyExcludeMode(), isFalse);
+    });
+
+    test('eBPF exclude 模式写 exclude_uid，不写 include', () {
+      final json = EbpfConfigGenerator.build(
+        proxy: const {
+          'proxyType': 'http',
+          'proxyHost': '1.2.3.4',
+          'proxyPort': '8080',
+          'ebpfNetwork': 'tcp',
+          'ebpfDataPlane': 'cgroup',
+        },
+        packageList: const ['com.tencent.mm'],
+        uidList: const [99910230],
+        exclude: true,
+        selfPackage: 'cn.ys1231.appproxy',
+      );
+      final cfg = jsonDecode(json) as Map<String, dynamic>;
+      final local = ((cfg['inbounds'] as List).first
+          as Map<String, dynamic>)['local'] as Map<String, dynamic>;
+      expect(local['exclude_uid'], [99910230]);
+      expect(local.containsKey('include_uid'), isFalse);
+      expect(local.containsKey('include_package'), isFalse);
+      expect(local['exclude_package'], contains('cn.ys1231.appproxy'));
+    });
+
+    test('eBPF exclude 模式无勾选时全局代理（仅排除自己）', () {
+      final json = EbpfConfigGenerator.build(
+        proxy: const {
+          'proxyType': 'http',
+          'proxyHost': '1.2.3.4',
+          'proxyPort': '8080',
+          'ebpfNetwork': 'tcp',
+          'ebpfDataPlane': 'cgroup',
+        },
+        packageList: const [],
+        uidList: const [],
+        exclude: true,
+        selfPackage: 'cn.ys1231.appproxy',
+      );
+      final cfg = jsonDecode(json) as Map<String, dynamic>;
+      final local = ((cfg['inbounds'] as List).first
+          as Map<String, dynamic>)['local'] as Map<String, dynamic>;
+      expect(local.containsKey('exclude_uid'), isFalse);
+      expect(local.containsKey('include_uid'), isFalse);
+      expect(local.containsKey('include_package'), isFalse);
+      expect(local['exclude_package'], ['cn.ys1231.appproxy']);
     });
   });
 
